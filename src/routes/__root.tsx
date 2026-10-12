@@ -8,14 +8,12 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import fontAsset from "@/assets/neue-haas-roman.otf.asset.json";
 import { FactoryProvider } from "@/components/erp/provider";
 import { AppShell } from "@/components/erp/shell";
 import { Toaster } from "sonner";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 
 function NotFoundComponent() {
   return (
@@ -42,9 +40,6 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -84,12 +79,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "CrateERP" },
       { name: "description", content: "Box and packaging factory operations" },
-      { name: "author", content: "Lovable" },
+      { name: "author", content: "CrateERP" },
       { property: "og:title", content: "CrateERP" },
       { property: "og:description", content: "Box and packaging factory operations" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -99,7 +93,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", href: "/icon-192.png", type: "image/png" },
       { rel: "manifest", href: "/manifest.json" },
       { rel: "apple-touch-icon", href: "/icon-192.png" },
-      { rel: "preload", href: fontAsset.url, as: "font", type: "font/otf", crossOrigin: "anonymous" },
+      { rel: "preload", href: "/neue-haas-roman.otf", as: "font", type: "font/otf", crossOrigin: "anonymous" },
     ],
   }),
   shellComponent: RootShell,
@@ -113,7 +107,7 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
-        <style>{`@font-face{font-family:"Neue Haas Roman";src:url("${fontAsset.url}") format("opentype");font-weight:100 900;font-display:swap;}`}</style>
+        <style>{`@font-face{font-family:"Neue Haas Roman";src:url("/neue-haas-roman.otf") format("opentype");font-weight:100 900;font-display:swap;}`}</style>
       </head>
       <body>
         {children}
