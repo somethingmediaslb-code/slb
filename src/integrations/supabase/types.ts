@@ -14,13 +14,546 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      challan_items: {
+        Row: {
+          challan_id: string
+          direct_labour_cost: number
+          dispatched_qty: number
+          id: string
+          order_item_id: string
+        }
+        Insert: {
+          challan_id: string
+          direct_labour_cost?: number
+          dispatched_qty: number
+          id?: string
+          order_item_id: string
+        }
+        Update: {
+          challan_id?: string
+          direct_labour_cost?: number
+          dispatched_qty?: number
+          id?: string
+          order_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challan_items_challan_id_fkey"
+            columns: ["challan_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_challans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "challan_items_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_challans: {
+        Row: {
+          challan_number: string
+          created_at: string | null
+          delivery_status: string | null
+          dispatch_date: string
+          freight_charges: number
+          id: string
+          lr_number: string | null
+          order_id: string
+          status: string
+          transport_carrier: string | null
+          vehicle_number: string | null
+        }
+        Insert: {
+          challan_number?: string
+          created_at?: string | null
+          delivery_status?: string | null
+          dispatch_date?: string
+          freight_charges?: number
+          id?: string
+          lr_number?: string | null
+          order_id: string
+          status?: string
+          transport_carrier?: string | null
+          vehicle_number?: string | null
+        }
+        Update: {
+          challan_number?: string
+          created_at?: string | null
+          delivery_status?: string | null
+          dispatch_date?: string
+          freight_charges?: number
+          id?: string
+          lr_number?: string | null
+          order_id?: string
+          status?: string
+          transport_carrier?: string | null
+          vehicle_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_challans_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string | null
+          expense_date: string
+          id: string
+          notes: string | null
+          payment_method: string | null
+          reference_dc_id: string | null
+        }
+        Insert: {
+          amount: number
+          category: string
+          created_at?: string | null
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          reference_dc_id?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string | null
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+          reference_dc_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_reference_dc_id_fkey"
+            columns: ["reference_dc_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_challans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      factory_notifications: {
+        Row: {
+          body: string
+          created_at: string | null
+          id: string
+          path: string
+          title: string
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          id?: string
+          path?: string
+          title: string
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          id?: string
+          path?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      item_master: {
+        Row: {
+          box_type: string
+          created_at: string | null
+          id: string
+          size_dimensions: string
+          specification: string | null
+          unit_rate: number
+        }
+        Insert: {
+          box_type: string
+          created_at?: string | null
+          id?: string
+          size_dimensions: string
+          specification?: string | null
+          unit_rate?: number
+        }
+        Update: {
+          box_type?: string
+          created_at?: string | null
+          id?: string
+          size_dimensions?: string
+          specification?: string | null
+          unit_rate?: number
+        }
+        Relationships: []
+      }
+      labour_borrowings: {
+        Row: {
+          amount: number
+          borrow_date: string
+          created_at: string | null
+          deducted_amount: number
+          id: string
+          labour_id: string
+          remarks: string | null
+        }
+        Insert: {
+          amount: number
+          borrow_date?: string
+          created_at?: string | null
+          deducted_amount?: number
+          id?: string
+          labour_id: string
+          remarks?: string | null
+        }
+        Update: {
+          amount?: number
+          borrow_date?: string
+          created_at?: string | null
+          deducted_amount?: number
+          id?: string
+          labour_id?: string
+          remarks?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labour_borrowings_labour_id_fkey"
+            columns: ["labour_id"]
+            isOneToOne: false
+            referencedRelation: "labour_master"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      labour_master: {
+        Row: {
+          created_at: string | null
+          daily_rate: number
+          id: string
+          labour_name: string
+          phone: string | null
+          unit_assignment: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          daily_rate?: number
+          id?: string
+          labour_name: string
+          phone?: string | null
+          unit_assignment?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          daily_rate?: number
+          id?: string
+          labour_name?: string
+          phone?: string | null
+          unit_assignment?: string | null
+        }
+        Relationships: []
+      }
+      labour_payroll: {
+        Row: {
+          created_at: string | null
+          deductions: number
+          gross: number
+          id: string
+          labour_id: string
+          net_paid: number
+          payout_date: string | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          deductions: number
+          gross: number
+          id?: string
+          labour_id: string
+          net_paid: number
+          payout_date?: string | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          deductions?: number
+          gross?: number
+          id?: string
+          labour_id?: string
+          net_paid?: number
+          payout_date?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "labour_payroll_labour_id_fkey"
+            columns: ["labour_id"]
+            isOneToOne: false
+            referencedRelation: "labour_master"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_items: {
+        Row: {
+          allocated_qty: number
+          box_type: string
+          code_remarks: string | null
+          completed_qty: number
+          created_at: string | null
+          dispatched_qty: number
+          id: string
+          order_id: string
+          ordered_qty: number
+          priority_signal: string
+          reserved_qty: number
+          size_dimensions: string
+          specification: string | null
+          sr_no: number
+          total_price: number | null
+          unit_rate: number
+        }
+        Insert: {
+          allocated_qty?: number
+          box_type: string
+          code_remarks?: string | null
+          completed_qty?: number
+          created_at?: string | null
+          dispatched_qty?: number
+          id?: string
+          order_id: string
+          ordered_qty: number
+          priority_signal?: string
+          reserved_qty?: number
+          size_dimensions: string
+          specification?: string | null
+          sr_no: number
+          total_price?: number | null
+          unit_rate?: number
+        }
+        Update: {
+          allocated_qty?: number
+          box_type?: string
+          code_remarks?: string | null
+          completed_qty?: number
+          created_at?: string | null
+          dispatched_qty?: number
+          id?: string
+          order_id?: string
+          ordered_qty?: number
+          priority_signal?: string
+          reserved_qty?: number
+          size_dimensions?: string
+          specification?: string | null
+          sr_no?: number
+          total_price?: number | null
+          unit_rate?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string | null
+          expected_date: string
+          id: string
+          is_self_stock: boolean
+          medium: string | null
+          order_date: string
+          order_no: string
+          party_id: string | null
+          remarks: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string | null
+          expected_date?: string
+          id?: string
+          is_self_stock?: boolean
+          medium?: string | null
+          order_date?: string
+          order_no?: string
+          party_id?: string | null
+          remarks?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string | null
+          expected_date?: string
+          id?: string
+          is_self_stock?: boolean
+          medium?: string | null
+          order_date?: string
+          order_no?: string
+          party_id?: string | null
+          remarks?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "party_master"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      party_master: {
+        Row: {
+          address: string | null
+          company_name: string
+          created_at: string
+          email: string | null
+          gstin: string | null
+          id: string
+          phone_number: string | null
+        }
+        Insert: {
+          address?: string | null
+          company_name: string
+          created_at?: string
+          email?: string | null
+          gstin?: string | null
+          id?: string
+          phone_number?: string | null
+        }
+        Update: {
+          address?: string | null
+          company_name?: string
+          created_at?: string
+          email?: string | null
+          gstin?: string | null
+          id?: string
+          phone_number?: string | null
+        }
+        Relationships: []
+      }
+      production_allocations: {
+        Row: {
+          allocated_qty: number
+          completed_qty: number
+          created_at: string | null
+          duration_hours: number
+          id: string
+          labour_id: string
+          labour_rate: number
+          order_item_id: string
+          paid_earnings: number
+          start_time: string
+          status: string
+          tentative_completion: string
+        }
+        Insert: {
+          allocated_qty: number
+          completed_qty?: number
+          created_at?: string | null
+          duration_hours: number
+          id?: string
+          labour_id: string
+          labour_rate: number
+          order_item_id: string
+          paid_earnings?: number
+          start_time?: string
+          status?: string
+          tentative_completion: string
+        }
+        Update: {
+          allocated_qty?: number
+          completed_qty?: number
+          created_at?: string | null
+          duration_hours?: number
+          id?: string
+          labour_id?: string
+          labour_rate?: number
+          order_item_id?: string
+          paid_earnings?: number
+          start_time?: string
+          status?: string
+          tentative_completion?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_allocations_labour_id_fkey"
+            columns: ["labour_id"]
+            isOneToOne: false
+            referencedRelation: "labour_master"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_allocations_order_item_id_fkey"
+            columns: ["order_item_id"]
+            isOneToOne: false
+            referencedRelation: "order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string | null
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string | null
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id?: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string | null
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      factory_action: { Args: { action: string; payload: Json }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
