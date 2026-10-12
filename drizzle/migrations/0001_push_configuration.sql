@@ -1,0 +1,1 @@
+CREATE TABLE public.push_configuration(id int PRIMARY KEY DEFAULT 1 CHECK(id=1),public_key text NOT NULL,private_key text NOT NULL); GRANT ALL ON public.push_configuration TO service_role; ALTER TABLE public.push_configuration ENABLE ROW LEVEL SECURITY;

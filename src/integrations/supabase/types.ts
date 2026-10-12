@@ -503,6 +503,24 @@ export type Database = {
           },
         ]
       }
+      push_configuration: {
+        Row: {
+          id: number
+          private_key: string
+          public_key: string
+        }
+        Insert: {
+          id?: number
+          private_key: string
+          public_key: string
+        }
+        Update: {
+          id?: number
+          private_key?: string
+          public_key?: string
+        }
+        Relationships: []
+      }
       push_subscriptions: {
         Row: {
           auth: string
