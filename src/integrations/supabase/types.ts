@@ -262,6 +262,7 @@ export type Database = {
       }
       labour_payroll: {
         Row: {
+          amount_paid: number
           created_at: string | null
           deductions: number
           gross: number
@@ -272,6 +273,7 @@ export type Database = {
           status: string | null
         }
         Insert: {
+          amount_paid?: number
           created_at?: string | null
           deductions: number
           gross: number
@@ -282,6 +284,7 @@ export type Database = {
           status?: string | null
         }
         Update: {
+          amount_paid?: number
           created_at?: string | null
           deductions?: number
           gross?: number

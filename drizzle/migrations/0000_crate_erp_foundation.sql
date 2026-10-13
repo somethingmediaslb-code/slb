@@ -81,7 +81,16 @@ FOR borrowing IN SELECT * FROM labour_borrowings WHERE labour_id=(payload->>'lab
 rate:=LEAST(remaining,borrowing.amount-borrowing.deducted_amount); UPDATE labour_borrowings SET deducted_amount=deducted_amount+rate WHERE id=borrowing.id; remaining:=remaining-rate;
 END LOOP;
 UPDATE production_allocations SET paid_earnings=completed_qty*labour_rate WHERE labour_id=(payload->>'labour_id')::uuid;
-INSERT INTO labour_payroll(labour_id,gross,deductions,net_paid) VALUES((payload->>'labour_id')::uuid,earnings,deduction,earnings-deduction) RETURNING id INTO rid;
+INSERT INTO labour_payroll(labour_id,gross,deductions,net_paid,amount_paid,status) VALUES((payload->>'labour_id')::uuid,earnings,deduction,earnings-deduction,0,CASE WHEN (earnings-deduction)<=0 THEN 'Paid' ELSE 'Pending' END) RETURNING id INTO rid;
+ELSIF action='disburse' THEN
+INSERT INTO labour_payroll_disbursements(payroll_id,amount,payment_mode,reference_notes,disbursed_at) VALUES((payload->>'payroll_id')::uuid,(payload->>'amount')::numeric,COALESCE(payload->>'payment_mode','Cash'),payload->>'reference_notes',COALESCE((payload->>'disbursed_at')::timestamptz,now())) RETURNING id INTO rid;
+ELSIF action='cancel_challan' THEN
+SELECT * INTO STRICT challan FROM delivery_challans WHERE id=(payload->>'id')::uuid FOR UPDATE;
+IF challan.status<>'Delivery Challan Made' THEN RAISE EXCEPTION 'Only non-dispatched challans in "Delivery Challan Made" status can be cancelled'; END IF;
+FOR obj IN SELECT to_jsonb(c) FROM challan_items c WHERE challan_id=challan.id LOOP
+UPDATE order_items SET reserved_qty=GREATEST(0,reserved_qty-(obj->>'dispatched_qty')::int) WHERE id=(obj->>'order_item_id')::uuid;
+END LOOP;
+UPDATE delivery_challans SET status='Cancelled' WHERE id=challan.id; rid:=challan.id;
 ELSE RAISE EXCEPTION 'Unknown factory action'; END IF;
 RETURN jsonb_build_object('id',rid);
 END; $$;

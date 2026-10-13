@@ -11,15 +11,18 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as DispatchRouteImport } from './routes/dispatch'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as ItemsRouteImport } from './routes/items'
 import { Route as LabourRouteImport } from './routes/labour'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as PartiesRouteImport } from './routes/parties'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as SignupRouteImport } from './routes/signup'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,6 +32,11 @@ const IndexRoute = IndexRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DispatchRoute = DispatchRouteImport.update({
@@ -49,6 +57,11 @@ const ItemsRoute = ItemsRouteImport.update({
 const LabourRoute = LabourRouteImport.update({
   id: '/labour',
   path: '/labour',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrdersRoute = OrdersRouteImport.update({
@@ -76,101 +89,127 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/dispatch': typeof DispatchRoute
   '/expenses': typeof ExpensesRoute
   '/items': typeof ItemsRoute
   '/labour': typeof LabourRoute
+  '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/parties': typeof PartiesRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/dispatch': typeof DispatchRoute
   '/expenses': typeof ExpensesRoute
   '/items': typeof ItemsRoute
   '/labour': typeof LabourRoute
+  '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/parties': typeof PartiesRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/dispatch': typeof DispatchRoute
   '/expenses': typeof ExpensesRoute
   '/items': typeof ItemsRoute
   '/labour': typeof LabourRoute
+  '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/parties': typeof PartiesRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
   '/settings': typeof SettingsRoute
+  '/signup': typeof SignupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/admin'
+    | '/auth'
     | '/dispatch'
     | '/expenses'
     | '/items'
     | '/labour'
+    | '/login'
     | '/orders'
     | '/parties'
     | '/production'
     | '/profile'
     | '/settings'
+    | '/signup'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin'
+    | '/auth'
     | '/dispatch'
     | '/expenses'
     | '/items'
     | '/labour'
+    | '/login'
     | '/orders'
     | '/parties'
     | '/production'
     | '/profile'
     | '/settings'
+    | '/signup'
   id:
     | '__root__'
     | '/'
     | '/admin'
+    | '/auth'
     | '/dispatch'
     | '/expenses'
     | '/items'
     | '/labour'
+    | '/login'
     | '/orders'
     | '/parties'
     | '/production'
     | '/profile'
     | '/settings'
+    | '/signup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AuthRoute: typeof AuthRoute
   DispatchRoute: typeof DispatchRoute
   ExpensesRoute: typeof ExpensesRoute
   ItemsRoute: typeof ItemsRoute
   LabourRoute: typeof LabourRoute
+  LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
   PartiesRoute: typeof PartiesRoute
   ProductionRoute: typeof ProductionRoute
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
+  SignupRoute: typeof SignupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -187,6 +226,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dispatch': {
@@ -215,6 +261,13 @@ declare module '@tanstack/react-router' {
       path: '/labour'
       fullPath: '/labour'
       preLoaderRoute: typeof LabourRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/orders': {
@@ -252,21 +305,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AuthRoute: AuthRoute,
   DispatchRoute: DispatchRoute,
   ExpensesRoute: ExpensesRoute,
   ItemsRoute: ItemsRoute,
   LabourRoute: LabourRoute,
+  LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,
   PartiesRoute: PartiesRoute,
   ProductionRoute: ProductionRoute,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
+  SignupRoute: SignupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

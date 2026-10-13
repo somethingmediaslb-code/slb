@@ -1,10 +1,11 @@
 import {VolumeCharts} from './volume-charts';
-import {useState} from 'react';
+import {useState,useEffect} from 'react';
 import {Printer,MessageCircle,FilePlus,Truck,CheckCircle2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,MiniSparkline} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker} from './common';
 import {downloadCsv,dateLabel,money,today,number,type Row} from '@/lib/erp-data';
 
 export function Dispatch(){
@@ -13,8 +14,14 @@ export function Dispatch(){
   const [tab,setTab]=useState<'ready'|'history'>('ready');
   const [selected,setSelected]=useState<Row<'order_items'>|null>(null);
   const [print,setPrint]=useState<Row<'delivery_challans'>|null>(null);
+  const [confirmDispatchChallan,setConfirmDispatchChallan]=useState<Row<'delivery_challans'>|null>(null);
   const [busy,setBusy]=useState(false);
   const [status,setStatus]=useState('All');
+  const [historyFrom,setHistoryFrom]=useState('');
+  const [historyTo,setHistoryTo]=useState('');
+  const [historyCompany,setHistoryCompany]=useState('All');
+  const [page,setPage]=useState(1);
+  const pageSize=10;
 
   const ready=d.items.filter(i=>i.completed_qty>i.dispatched_qty+i.reserved_qty);
   const company=(orderId:string)=>{
@@ -26,14 +33,28 @@ export function Dispatch(){
 
   const filteredHistory=d.challans.filter(c=>{
     const matchesStatus=status==='All'||c.status===status;
-    const matchesSearch=(c.challan_number+' '+company(c.order_id)+' '+(c.transport_carrier??'')).toLowerCase().includes(search.toLowerCase());
-    return matchesStatus&&matchesSearch;
+    const cPartyName=company(c.order_id);
+    const matchesCompany=historyCompany==='All'||cPartyName===historyCompany;
+    const dDate=c.dispatch_date?c.dispatch_date.slice(0,10):'';
+    const matchesFrom=!historyFrom||(dDate&&dDate>=historyFrom);
+    const matchesTo=!historyTo||(dDate&&dDate<=historyTo);
+    const matchesSearch=(c.challan_number+' '+cPartyName+' '+(c.transport_carrier??'')+' '+(c.vehicle_number??'')+' '+(c.lr_number??'')).toLowerCase().includes(search.toLowerCase());
+    return matchesStatus&&matchesCompany&&matchesFrom&&matchesTo&&matchesSearch;
   });
 
+  useEffect(()=>{
+    setPage(1);
+  },[search,tab,status,historyFrom,historyTo,historyCompany]);
+
+  const paginatedReady=filteredReady.slice((page-1)*pageSize,page*pageSize);
+  const paginatedHistory=filteredHistory.slice((page-1)*pageSize,page*pageSize);
+
   const totalReadyQty=filteredReady.reduce((sum,i)=>sum+(i.completed_qty-i.dispatched_qty-i.reserved_qty),0);
-  const totalDispatchedQty=filteredHistory.reduce((sum,c)=>{
-    return sum+d.challanItems.filter(ci=>ci.challan_id===c.id).reduce((s,i)=>s+i.dispatched_qty,0);
-  },0);
+  const totalDispatchedQty=filteredHistory
+    .filter(c=>c.status==='Dispatched')
+    .reduce((sum,c)=>{
+      return sum+d.challanItems.filter(ci=>ci.challan_id===c.id).reduce((s,i)=>s+i.dispatched_qty,0);
+    },0);
 
   async function submit(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();
@@ -59,18 +80,28 @@ export function Dispatch(){
   function whatsapp(c:Row<'delivery_challans'>){
     const order=d.orders.find(o=>o.id===c.order_id);
     const party=d.parties.find(p=>p.id===order?.party_id);
-    const lines=d.challanItems.filter(i=>i.challan_id===c.id).map(i=>{
+    const lines=d.challanItems.filter(i=>i.challan_id===c.id).map((i,idx)=>{
       const item=d.items.find(x=>x.id===i.order_item_id);
-      return 'Item '+item?.sr_no+': '+item?.box_type+', '+item?.size_dimensions+', dispatched quantity '+i.dispatched_qty;
+      return `Item #${item?.sr_no ?? (idx+1)}: ${item?.box_type || 'Box'} | Size: ${item?.size_dimensions || 'Standard'} | Dispatched Qty: ${i.dispatched_qty} units`;
     });
-    const text=[company(c.order_id),'PO: '+order?.order_no,'Challan: '+c.challan_number,...lines].join('\n');
+    const text=[
+      `*Delivery Challan Notice*`,
+      `Company: ${company(c.order_id)}`,
+      `PO Number: ${order?.order_no || '—'}`,
+      `Challan: ${c.challan_number}`,
+      `Vehicle: ${c.vehicle_number || '—'} | LR: ${c.lr_number || '—'}`,
+      `Dispatch Date: ${dateLabel(c.dispatch_date)}`,
+      '',
+      `*Items Dispatched:*`,
+      ...lines
+    ].join('\n');
     const phone=party?.phone_number?.replace(/\D/g,'')??'';
     window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(text),'_blank','noopener,noreferrer');
   }
 
   return (
     <>
-      <Heading title="Dispatch & Delivery">
+      <Heading title="Dispatch & Delivery Challan">
         <ExportButton onClick={()=>downloadCsv('delivery-challans',filteredHistory)}/>
       </Heading>
 
@@ -79,7 +110,7 @@ export function Dispatch(){
       {/* View Tabs */}
       <ViewTabs
         tabs={[
-          {id:'ready',label:'Awaiting Dispatch',count:ready.length},
+          {id:'ready',label:'Ready to Dispatch',count:ready.length},
           {id:'history',label:'Challan History',count:d.challans.length},
         ]}
         active={tab}
@@ -90,48 +121,61 @@ export function Dispatch(){
         <SearchFilter value={search} onChange={setSearch} placeholder="Search client, PO number or challan…"/>
 
         {tab==='history' && (
-          <FilterToken
-            label="Challan Status"
-            value={status}
-            onChange={setStatus}
-            options={[
-              {value:'All',label:'All statuses'},
-              {value:'Delivery Challan Made',label:'Challan Generated'},
-              {value:'Dispatched',label:'Out for Delivery / Dispatched'},
-            ]}
-          />
+          <>
+            <DateFilterPill label="From" value={historyFrom} onChange={setHistoryFrom} placeholder="All" />
+            <DateFilterPill label="To" value={historyTo} onChange={setHistoryTo} placeholder="All" />
+            <FilterToken
+              label="Customer"
+              value={historyCompany}
+              onChange={setHistoryCompany}
+              options={[
+                {value:'All',label:'All Customers'},
+                ...Array.from(new Set(d.challans.map(c=>company(c.order_id)))).map(name=>({value:name,label:name}))
+              ]}
+            />
+            <FilterToken
+              label="Challan Status"
+              value={status}
+              onChange={setStatus}
+              options={[
+                {value:'All',label:'All statuses'},
+                {value:'Delivery Challan Made',label:'Challan Generated'},
+                {value:'Dispatched',label:'Out for Delivery / Dispatched'},
+                {value:'Cancelled',label:'Cancelled'},
+              ]}
+            />
+          </>
         )}
       </div>
 
       {tab==='ready' ? (
         <>
-          <div className="table-wrap">
+          <div className="desktop-table-view table-wrap">
             <table>
               <thead>
                 <tr>
                   <th className="w-8">
-                    <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label="Select all" readOnly />
+                    <Checkbox aria-label="Select all" />
                   </th>
                   <th>Client / PO</th>
                   <th>Box Type & Dimensions</th>
                   <th className="numeric">Ordered</th>
                   <th className="numeric">Produced</th>
                   <th className="numeric">Dispatched</th>
-                  <th className="numeric">Ready to Ship</th>
+                  <th className="numeric">Ready to Dispatch</th>
                   <th>Fulfillment</th>
-                  <th>Trend</th>
                   <th className="text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredReady.length ? filteredReady.map(i=>{
+                {paginatedReady.length ? paginatedReady.map(i=>{
                   const available=i.completed_qty-i.dispatched_qty-i.reserved_qty;
                   const partyName=company(i.order_id);
                   const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
                   return (
                     <tr key={i.id} className="clickable-row" onClick={()=>setSelected(i)}>
                       <td onClick={e=>e.stopPropagation()}>
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label={`Select ${i.box_type}`} />
+                        <Checkbox aria-label={`Select ${i.box_type}`} />
                       </td>
                       <td>
                         <div className="flex items-center gap-2.5">
@@ -157,9 +201,6 @@ export function Dispatch(){
                       <td>
                         <SegmentedMeter value={i.completed_qty} total={i.ordered_qty} />
                       </td>
-                      <td>
-                        <MiniSparkline />
-                      </td>
                       <td className="text-right" onClick={e=>e.stopPropagation()}>
                         <Button size="sm" variant="outline" onClick={()=>setSelected(i)}>
                           <FilePlus className="w-3.5 h-3.5 mr-1"/> Create Challan
@@ -168,48 +209,129 @@ export function Dispatch(){
                     </tr>
                   );
                 }) : (
-                  <Empty columns={10} label="No completed inventory awaiting dispatch"/>
+                  <Empty columns={9} label="No completed inventory awaiting dispatch"/>
                 )}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/20 font-medium">
+                  <td colSpan={3} className="text-right text-xs text-muted-foreground font-semibold px-3 py-2.5">
+                    Ready Totals ({number(filteredReady.length)} items):
+                  </td>
+                  <td className="numeric text-muted-foreground px-3 py-2.5 tabular-nums">
+                    {number(filteredReady.reduce((s,i)=>s+i.ordered_qty,0))}
+                  </td>
+                  <td className="numeric text-muted-foreground px-3 py-2.5 tabular-nums">
+                    {number(filteredReady.reduce((s,i)=>s+i.completed_qty,0))}
+                  </td>
+                  <td className="numeric text-muted-foreground px-3 py-2.5 tabular-nums">
+                    {number(filteredReady.reduce((s,i)=>s+i.dispatched_qty,0))}
+                  </td>
+                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                    {number(totalReadyQty)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
             </table>
           </div>
 
-          <TableCalcBar
-            count={filteredReady.length}
-            entityName="items"
-            stats={[
-              {label:'Ready to Dispatch',value:`${number(totalReadyQty)} boxes`},
-            ]}
+          {/* Mobile Card View */}
+          <div className="mobile-card-view">
+            {paginatedReady.length ? paginatedReady.map(i => {
+              const available=i.completed_qty-i.dispatched_qty-i.reserved_qty;
+              const partyName=company(i.order_id);
+              const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
+              const orderNo = d.orders.find(o=>o.id===i.order_id)?.order_no || '—';
+              return (
+                <div key={i.id} className="mobile-record-card" onClick={()=>setSelected(i)}>
+                  <div className="mobile-card-top">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
+                        {monogram}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="mobile-card-title">{partyName}</div>
+                        <div className="mobile-card-sub">{orderNo} · {i.box_type}</div>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-500">
+                      {number(available)} Ready
+                    </span>
+                  </div>
+
+                  <div className="text-xs text-muted-foreground">
+                    Dimensions: <span className="text-foreground font-medium">{i.size_dimensions || 'Standard'}</span>
+                  </div>
+
+                  <div className="mobile-card-grid">
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Ordered</span>
+                      <span className="mobile-card-value">{number(i.ordered_qty)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Produced</span>
+                      <span className="mobile-card-value">{number(i.completed_qty)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Dispatched</span>
+                      <span className="mobile-card-value">{number(i.dispatched_qty)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Fulfillment</span>
+                      <span className="mobile-card-value">{Math.round((i.completed_qty / (i.ordered_qty || 1)) * 100)}%</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions">
+                    <Button size="sm" variant="outline" className="w-full" onClick={(e)=>{ e.stopPropagation(); setSelected(i); }}>
+                      <FilePlus className="w-3.5 h-3.5 mr-1"/> Create Delivery Challan
+                    </Button>
+                  </div>
+                </div>
+              );
+            }) : (
+              <Empty columns={1} label="No completed inventory awaiting dispatch" />
+            )}
+          </div>
+
+          <Pagination
+            currentPage={page}
+            totalItems={filteredReady.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
           />
+
         </>
       ) : (
         <>
-          <div className="table-wrap">
+          <div className="desktop-table-view table-wrap">
             <table>
               <thead>
                 <tr>
                   <th className="w-8">
-                    <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label="Select all" readOnly />
+                    <Checkbox aria-label="Select all" />
                   </th>
                   <th>Challan Number</th>
                   <th>Customer / Account</th>
                   <th>Dispatch Date</th>
                   <th>Transporter Carrier</th>
                   <th>Vehicle #</th>
+                  <th>LR #</th>
+                  <th className="numeric">Freight (₹)</th>
                   <th className="numeric">Total Shipped</th>
-                  <th>Status</th>
+                  <th>Delivery Status</th>
                   <th className="text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredHistory.length ? filteredHistory.map(c=>{
+                {paginatedHistory.length ? paginatedHistory.map(c=>{
                   const shipped=d.challanItems.filter(i=>i.challan_id===c.id).reduce((s,i)=>s+i.dispatched_qty,0);
                   const partyName=company(c.order_id);
                   const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
                   return (
                     <tr key={c.id}>
                       <td onClick={e=>e.stopPropagation()}>
-                        <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label={`Select ${c.challan_number}`} />
+                        <Checkbox aria-label={`Select ${c.challan_number}`} />
                       </td>
                       <td className="font-medium text-foreground">{c.challan_number}</td>
                       <td>
@@ -223,26 +345,37 @@ export function Dispatch(){
                       <td>{dateLabel(c.dispatch_date)}</td>
                       <td>{c.transport_carrier||'—'}</td>
                       <td>{c.vehicle_number||'—'}</td>
+                      <td>{c.lr_number||'—'}</td>
+                      <td className="numeric text-muted-foreground">{money(c.freight_charges||0)}</td>
                       <td className="numeric font-medium text-foreground">{number(shipped)}</td>
                       <td><Pill value={c.status}/></td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           {c.status==='Delivery Challan Made' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={()=>{
-                                if(window.confirm('Confirm this delivery has physically departed?')) {
-                                  action('dispatch',{id:c.id});
-                                }
-                              }}
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1"/> Confirm Exit
-                            </Button>
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={()=>setConfirmDispatchChallan(c)}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1"/> Confirm Dispatch
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={async () => {
+                                  if (window.confirm(`Are you sure you want to cancel ${c.challan_number}? This will immediately release reserved completed boxes back to inventory.`)) {
+                                    await action('cancel_challan', { id: c.id });
+                                  }
+                                }}
+                              >
+                                Cancel challan
+                              </Button>
+                            </>
                           )}
                           <Button
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             aria-label="Print challan"
                             title="Print delivery challan"
                             onClick={()=>setPrint(c)}
@@ -251,7 +384,7 @@ export function Dispatch(){
                           </Button>
                           <Button
                             variant="ghost"
-                            size="icon"
+                            size="icon-sm"
                             aria-label="Send WhatsApp alert"
                             title="Send dispatch WhatsApp alert"
                             disabled={c.status!=='Dispatched'}
@@ -264,19 +397,130 @@ export function Dispatch(){
                     </tr>
                   );
                 }) : (
-                  <Empty columns={9} label="No delivery challans generated yet"/>
+                  <Empty columns={11} label="No delivery challans generated yet"/>
                 )}
               </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/20 font-medium">
+                  <td colSpan={7} className="text-right text-xs text-muted-foreground font-semibold px-3 py-2.5">
+                    History Totals ({number(filteredHistory.length)} challans):
+                  </td>
+                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                    {money(filteredHistory.reduce((s,c)=>s+(c.freight_charges??0),0))}
+                  </td>
+                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                    {number(totalDispatchedQty)}
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
             </table>
           </div>
 
-          <TableCalcBar
-            count={filteredHistory.length}
-            entityName="challans"
-            stats={[
-              {label:'Total Dispatched',value:`${number(totalDispatchedQty)} boxes`},
-            ]}
+          {/* Mobile Card View */}
+          <div className="mobile-card-view">
+            {paginatedHistory.length ? paginatedHistory.map(c => {
+              const shipped=d.challanItems.filter(i=>i.challan_id===c.id).reduce((s,i)=>s+i.dispatched_qty,0);
+              const partyName=company(c.order_id);
+              const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
+              return (
+                <div key={c.id} className="mobile-record-card">
+                  <div className="mobile-card-top">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
+                        {monogram}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="mobile-card-title">{c.challan_number}</div>
+                        <div className="mobile-card-sub">{partyName}</div>
+                      </div>
+                    </div>
+                    <Pill value={c.status}/>
+                  </div>
+
+                  <div className="mobile-card-grid">
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Dispatch Date</span>
+                      <span className="mobile-card-value">{dateLabel(c.dispatch_date)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Shipped Qty</span>
+                      <span className="mobile-card-value font-semibold">{number(shipped)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Carrier</span>
+                      <span className="mobile-card-value">{c.transport_carrier || '—'}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Vehicle #</span>
+                      <span className="mobile-card-value">{c.vehicle_number || '—'}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">LR / Consignment #</span>
+                      <span className="mobile-card-value">{c.lr_number || '—'}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Freight Charges</span>
+                      <span className="mobile-card-value text-muted-foreground">{money(c.freight_charges || 0)}</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions flex gap-2 pt-1">
+                    {c.status==='Delivery Challan Made' && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          onClick={()=>setConfirmDispatchChallan(c)}
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1"/> Confirm Dispatch
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 text-destructive hover:bg-destructive/10"
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to cancel ${c.challan_number}? This will immediately release reserved completed boxes back to inventory.`)) {
+                              await action('cancel_challan', { id: c.id });
+                            }
+                          }}
+                        >
+                          Cancel challan
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={()=>setPrint(c)}
+                    >
+                      <Printer className="w-3.5 h-3.5 mr-1"/> Print
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={c.status!=='Dispatched'}
+                      onClick={()=>whatsapp(c)}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5"/>
+                    </Button>
+                  </div>
+                </div>
+              );
+            }) : (
+              <Empty columns={1} label="No delivery challans generated yet"/>
+            )}
+          </div>
+
+          <Pagination
+            currentPage={page}
+            totalItems={filteredHistory.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
           />
+
         </>
       )}
 
@@ -306,7 +550,7 @@ export function Dispatch(){
 
               <label>
                 Dispatch Date
-                <input name="dispatch_date" type="date" defaultValue={today()} required/>
+                <ThemedDatePicker name="dispatch_date" defaultValue={today()} required />
               </label>
 
               <label>
@@ -406,6 +650,73 @@ export function Dispatch(){
                 </Button>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Explicit Confirm Dispatch Step Dialog */}
+      <Dialog open={!!confirmDispatchChallan} onOpenChange={()=>setConfirmDispatchChallan(null)}>
+        <DialogContent className="modal-wide" aria-describedby={undefined}>
+          <DialogTitle className="text-xl font-medium">Confirm Physical Dispatch · {confirmDispatchChallan?.challan_number}</DialogTitle>
+          <div className="form-subtitle">
+            Confirm that the shipment has physically departed the factory floor. This transitions status to Dispatched and finalizes inventory deductions.
+          </div>
+          {confirmDispatchChallan && (
+            <div className="space-y-4 my-4">
+              <div className="p-4 bg-card border border-border rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-muted-foreground block">Customer / Party</span>
+                  <strong className="text-sm font-semibold text-foreground">{company(confirmDispatchChallan.order_id)}</strong>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Dispatch Date</span>
+                  <span className="text-sm font-medium text-foreground">{dateLabel(confirmDispatchChallan.dispatch_date)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Current Status</span>
+                  <Pill value={confirmDispatchChallan.status}/>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Carrier</span>
+                  <span className="text-sm font-medium text-foreground">{confirmDispatchChallan.transport_carrier||'Direct / Self'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Vehicle Number</span>
+                  <span className="text-sm font-medium text-foreground">{confirmDispatchChallan.vehicle_number||'—'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">LR / Consignment #</span>
+                  <span className="text-sm font-medium text-foreground">{confirmDispatchChallan.lr_number||'—'}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Freight Charges</span>
+                  <span className="text-sm font-medium text-foreground">{money(confirmDispatchChallan.freight_charges||0)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block">Total Boxes</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {number(d.challanItems.filter(i=>i.challan_id===confirmDispatchChallan.id).reduce((s,i)=>s+i.dispatched_qty,0))} units
+                  </span>
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <Button variant="outline" type="button" onClick={()=>setConfirmDispatchChallan(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={busy}
+                  onClick={async()=>{
+                    setBusy(true);
+                    const ok=await action('dispatch',{id:confirmDispatchChallan.id});
+                    setBusy(false);
+                    if(ok)setConfirmDispatchChallan(null);
+                  }}
+                >
+                  {busy?'Confirming…':'Confirm Dispatch & Depart'}
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

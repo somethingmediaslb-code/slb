@@ -1,10 +1,11 @@
-import {useState} from 'react';
-import {Pencil,Building2,Mail,Phone,FileText,MapPin,MoreHorizontal,CheckCircle2,Clock,Package,Layers} from 'lucide-react';
+import {useState,useEffect} from 'react';
+import {Pencil,Building2,Mail,Phone,FileText,MapPin,MoreHorizontal,CheckCircle2,Clock,Package,Layers,Trash2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,TableCalcBar,CrmTag,SegmentedMeter,MiniSparkline,Pill} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,TableCalcBar,CrmTag,SegmentedMeter,Pill,Pagination} from './common';
 import {supabase} from '@/integrations/supabase/client';
 import {downloadCsv,money,dateLabel,number} from '@/lib/erp-data';
 import {toast} from 'sonner';
@@ -19,10 +20,10 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
     fields:[['company_name','Company Name'],['phone_number','Phone Number'],['email','Email Address'],['gstin','GSTIN Number'],['address','Factory / Billing Address']]
   },
   items:{
-    title:'Item Catalog',
+    title:'Item Master',
     entity:'box specifications',
     add:'Add Catalog Item',
-    fields:[['box_type','Box Type'],['size_dimensions','Size Dimensions'],['specification','Ply / Flute Spec'],['unit_rate','Standard Unit Rate (₹)']]
+    fields:[['box_type','Box Type'],['size_dimensions','Size Dimensions'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
   },
   workers:{
     title:'Labour Master',
@@ -32,8 +33,9 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
   }
 };
 
-export function MasterPage({kind}:{kind:Kind}){
+export function MasterPage({kind,title}:{kind:Kind;title?:string}){
   const c=config[kind];
+  const pageTitle=title||c.title;
   const {data,user,signIn,refresh}=useFactory();
   const [search,setSearch]=useState('');
   const [open,setOpen]=useState(false);
@@ -41,8 +43,34 @@ export function MasterPage({kind}:{kind:Kind}){
   const [viewPartyId,setViewPartyId]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
 
+  async function deleteRecord(row:Record<string,unknown>){
+    if(!user){signIn();return;}
+    const id=String(row['id']);
+    const name=String(row['company_name']||row['box_type']||row['labour_name']||'record');
+    if(!window.confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`))return;
+    setBusy(true);
+    const table=kind==='parties'?'party_master':kind==='items'?'item_master':'labour_master';
+    const {error}=await supabase.from(table).delete().eq('id',id);
+    setBusy(false);
+    if(error){
+      toast.error(error.message);
+      return;
+    }
+    await refresh();
+    toast.success('Record deleted successfully');
+  }
+
+  const [page,setPage]=useState(1);
+  const pageSize=10;
+
   const rows:Record<string,unknown>[]=kind==='parties'?data.parties:kind==='items'?data.catalog:data.workers;
   const filtered=rows.filter(r=>Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase()));
+
+  useEffect(()=>{
+    setPage(1);
+  },[search]);
+
+  const paginated=filtered.slice((page-1)*pageSize,page*pageSize);
 
   function add(){
     if(!user){signIn();return;}
@@ -106,8 +134,8 @@ export function MasterPage({kind}:{kind:Kind}){
 
   return (
     <>
-      <Heading title={c.title}>
-        <ExportButton onClick={()=>downloadCsv(c.title,filtered)}/>
+      <Heading title={pageTitle}>
+        <ExportButton onClick={()=>downloadCsv(pageTitle,filtered)}/>
         <AddButton onClick={add}>{c.add}</AddButton>
       </Heading>
 
@@ -117,13 +145,14 @@ export function MasterPage({kind}:{kind:Kind}){
         <SearchFilter value={search} onChange={setSearch} placeholder={`Search ${c.entity}…`}/>
       </div>
 
-      <div className="table-wrap">
+      {/* Desktop Table View */}
+      <div className="desktop-table-view table-wrap">
         <table>
           <thead>
             <tr>
               {kind==='parties' && (
                 <th className="w-8">
-                  <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label="Select all" readOnly />
+                  <Checkbox aria-label="Select all" />
                 </th>
               )}
               {c.fields.map(([key,label])=><th key={key}>{label}</th>)}
@@ -131,14 +160,13 @@ export function MasterPage({kind}:{kind:Kind}){
                 <>
                   <th className="numeric">Lifetime Spend</th>
                   <th>Order Health</th>
-                  <th>Activity Trend</th>
                 </>
               )}
-              <th className="w-8"/>
+              <th className="w-16 text-right"/>
             </tr>
           </thead>
           <tbody>
-            {filtered.length ? filtered.map(r=>{
+            {paginated.length ? paginated.map(r=>{
               const id=String(r['id']);
               const pOrders=kind==='parties'?data.orders.filter(o=>o.party_id===id):[];
               const pSpend=pOrders.reduce((sum,o)=>{
@@ -155,7 +183,7 @@ export function MasterPage({kind}:{kind:Kind}){
                 >
                   {kind==='parties' && (
                     <td onClick={e=>e.stopPropagation()}>
-                      <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label={`Select record`} />
+                      <Checkbox aria-label={`Select record`} />
                     </td>
                   )}
                   {c.fields.map(([key],idx)=>{
@@ -193,33 +221,231 @@ export function MasterPage({kind}:{kind:Kind}){
                       <td>
                         <SegmentedMeter value={pDone} total={Math.max(pOrders.length,1)} />
                       </td>
-                      <td>
-                        <MiniSparkline />
-                      </td>
                     </>
                   )}
                   <td onClick={e=>e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="dots-btn"
-                      aria-label="Edit record"
-                      title="Edit record"
-                      onClick={()=>{
-                        setEditing(r);
-                        setOpen(true);
-                      }}
-                    >
-                      <Pencil className="w-4 h-4"/>
-                    </button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Edit record"
+                        title="Edit record"
+                        onClick={()=>{
+                          setEditing(r);
+                          setOpen(true);
+                        }}
+                      >
+                        <Pencil className="w-4 h-4"/>
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="icon-sm"
+                        aria-label="Delete record"
+                        title="Delete record"
+                        onClick={()=>deleteRecord(r)}
+                      >
+                        <Trash2 className="w-4 h-4"/>
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               );
             }) : (
-              <Empty columns={c.fields.length+(kind==='parties'?5:1)} label={`No ${c.entity} registered yet`}/>
+              <Empty columns={c.fields.length+(kind==='parties'?4:1)} label={`No ${c.entity} registered yet`}/>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Mobile Card View (No Horizontal Sliding Required) */}
+      <div className="mobile-card-view">
+        {paginated.length ? paginated.map(r => {
+          const id = String(r['id']);
+          const pOrders = kind === 'parties' ? data.orders.filter(o => o.party_id === id) : [];
+          const pSpend = pOrders.reduce((sum, o) => {
+            const items = data.items.filter(i => i.order_id === o.id);
+            return sum + items.reduce((s, i) => s + (i.total_price ?? 0), 0);
+          }, 0);
+          const pDone = pOrders.filter(o => o.status === 'Completed').length;
+
+          if (kind === 'parties') {
+            const name = String(r['company_name'] || 'Client');
+            const gstin = String(r['gstin'] || '');
+            const phone = String(r['phone_number'] || '—');
+            const email = String(r['email'] || '—');
+            return (
+              <div
+                key={id}
+                className="mobile-record-card"
+                onClick={() => setViewPartyId(id)}
+              >
+                <div className="mobile-card-top">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="avatar !w-7 !h-7 !text-[10px] font-semibold bg-accent flex-shrink-0">
+                      {name.slice(0, 2).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <div className="mobile-card-title">{name}</div>
+                      <div className="mobile-card-sub">{phone}</div>
+                    </div>
+                  </div>
+                  {gstin && <CrmTag label={gstin.slice(0, 10)} variant="blue" />}
+                </div>
+
+                <div className="mobile-card-grid">
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Lifetime Spend</span>
+                    <span className="mobile-card-value">{money(pSpend)}</span>
+                  </div>
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Orders Run</span>
+                    <span className="mobile-card-value">{pOrders.length}</span>
+                  </div>
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Email</span>
+                    <span className="mobile-card-value truncate">{email}</span>
+                  </div>
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Fulfilment</span>
+                    <span className="mobile-card-value">
+                      {pOrders.length > 0 ? Math.round((pDone / pOrders.length) * 100) : 0}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mobile-card-actions">
+                  <div className="flex-1">
+                    <SegmentedMeter value={pDone} total={Math.max(pOrders.length, 1)} />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(r);
+                      setOpen(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            );
+          }
+
+          if (kind === 'items') {
+            const boxType = String(r['box_type'] || 'Custom Box');
+            const spec = String(r['specification'] || 'Standard');
+            const dims = String(r['size_dimensions'] || '—');
+            const rate = Number(r['unit_rate'] || 0);
+            return (
+              <div
+                key={id}
+                className="mobile-record-card"
+                onClick={() => {
+                  setEditing(r);
+                  setOpen(true);
+                }}
+              >
+                <div className="mobile-card-top">
+                  <div className="mobile-card-title-group">
+                    <div className="mobile-card-title">{boxType}</div>
+                    <div className="mobile-card-sub">{dims}</div>
+                  </div>
+                  <CrmTag label={spec} variant="blue" />
+                </div>
+
+                <div className="mobile-card-grid">
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Standard Rate</span>
+                    <span className="mobile-card-value">{money(rate)}</span>
+                  </div>
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Dimensions</span>
+                    <span className="mobile-card-value">{dims}</span>
+                  </div>
+                </div>
+
+                <div className="mobile-card-actions">
+                  <span className="text-xs text-muted-foreground">Catalog Item</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(r);
+                      setOpen(true);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            );
+          }
+
+          // workers
+          const workerName = String(r['labour_name'] || 'Worker');
+          const phone = String(r['phone'] || '—');
+          const unit = String(r['unit_assignment'] || 'General');
+          const dailyRate = Number(r['daily_rate'] || 0);
+          return (
+            <div
+              key={id}
+              className="mobile-record-card"
+              onClick={() => {
+                setEditing(r);
+                setOpen(true);
+              }}
+            >
+              <div className="mobile-card-top">
+                <div className="mobile-card-title-group">
+                  <div className="mobile-card-title">{workerName}</div>
+                  <div className="mobile-card-sub">{phone}</div>
+                </div>
+                <CrmTag label={unit} variant="purple" />
+              </div>
+
+              <div className="mobile-card-grid">
+                <div className="mobile-card-field">
+                  <span className="mobile-card-label">Daily Wage</span>
+                  <span className="mobile-card-value">{money(dailyRate)}</span>
+                </div>
+                <div className="mobile-card-field">
+                  <span className="mobile-card-label">Assignment</span>
+                  <span className="mobile-card-value">{unit}</span>
+                </div>
+              </div>
+
+              <div className="mobile-card-actions">
+                <span className="text-xs text-muted-foreground">Team Member</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditing(r);
+                    setOpen(true);
+                  }}
+                >
+                  Edit
+                </Button>
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="p-8 text-center text-sm text-muted-foreground bg-card border border-border rounded-xl">
+            No {c.entity} registered yet
+          </div>
+        )}
+      </div>
+
+      <Pagination
+        currentPage={page}
+        totalItems={filtered.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+      />
 
       <TableCalcBar count={filtered.length} entityName={c.entity}/>
 
@@ -231,11 +457,7 @@ export function MasterPage({kind}:{kind:Kind}){
               <>
                 <div className="p-6 border-b border-border bg-background">
                   <SheetHeader className="text-left space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <Building2 className="w-4 h-4 text-primary" />
-                        <span>Company Detail</span>
-                      </div>
+                    <div className="flex items-center justify-end">
                       <CrmTag label="Active Client" variant="green" />
                     </div>
                     <div className="drawer-hero-box">
@@ -282,87 +504,45 @@ export function MasterPage({kind}:{kind:Kind}){
                     </div>
                   </div>
 
-                  {/* Pipeline Health (Screenshot 5) */}
+                  {/* Order Fulfillment Health */}
                   <div>
-                    <div className="drawer-section-label">Pipeline Health</div>
-                    <div className="p-4 bg-background border border-border rounded-lg">
-                      <div className="drawer-health-headline">
-                        {partyOrders.length > 0 ? Math.round((partyCompletedCount / partyOrders.length) * 100) : 100}%
-                      </div>
-                      <div className="drawer-health-sub">
-                        Fulfillment efficiency across lifetime manufacturing runs
+                    <div className="drawer-section-label">Order Fulfilment Health</div>
+                    <div className="p-4 bg-background border border-border rounded-lg space-y-4">
+                      <div className="flex items-baseline gap-3 pb-2 border-b border-border/60">
+                        <div className="text-3xl font-semibold text-foreground tabular-nums">
+                          {partyOrders.length > 0 ? Math.round((partyCompletedCount / partyOrders.length) * 100) : 100}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Fulfillment efficiency across lifetime manufacturing runs
+                        </div>
                       </div>
 
                       <div className="space-y-3 pt-1">
-                        <div className="stage-meter-row">
-                          <div className="stage-meter-header">
-                            <span>Account Onboarding & Specs</span>
-                            <span>100%</span>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-medium text-foreground">Account Onboarding & Specs</span>
+                            <span className="text-muted-foreground tabular-nums font-medium">100%</span>
                           </div>
-                          <div className="stage-meter-track">
-                            {Array.from({ length: 28 }).map((_, i) => (
-                              <span key={i} className="stage-meter-bar active-stage-green" />
-                            ))}
+                          <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                            <div className="h-full bg-emerald-500 rounded-full w-full" />
                           </div>
                         </div>
 
-                        <div className="stage-meter-row">
-                          <div className="stage-meter-header">
-                            <span>Delivered Orders</span>
-                            <span>{partyOrders.length > 0 ? Math.round((partyCompletedCount / partyOrders.length) * 100) : 0}%</span>
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-medium text-foreground">Delivered Orders</span>
+                            <span className="text-muted-foreground tabular-nums font-medium">
+                              {partyOrders.length > 0 ? Math.round((partyCompletedCount / partyOrders.length) * 100) : 0}%
+                            </span>
                           </div>
-                          <div className="stage-meter-track">
-                            {Array.from({ length: 28 }).map((_, i) => {
-                              const pct = partyOrders.length > 0 ? partyCompletedCount / partyOrders.length : 0;
-                              const isActive = i < Math.round(pct * 28);
-                              return (
-                                <span
-                                  key={i}
-                                  className={`stage-meter-bar ${isActive ? 'active-stage-green' : ''}`}
-                                />
-                              );
-                            })}
+                          <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-300"
+                              style={{
+                                width: `${partyOrders.length > 0 ? Math.min(100, Math.round((partyCompletedCount / partyOrders.length) * 100)) : 0}%`
+                              }}
+                            />
                           </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Activity Trend (Screenshot 5) */}
-                  <div>
-                    <div className="drawer-section-label">
-                      <span>Activity Trend</span>
-                      <span className="text-[11px] font-normal text-muted-foreground border border-border px-2 py-0.5 rounded-full bg-card">
-                        Last 30 Days ▾
-                      </span>
-                    </div>
-                    <div className="p-4 bg-background border border-border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl font-medium text-foreground">
-                          {partyOrders.length * 8 + 12}
-                        </span>
-                        <MiniSparkline />
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 mb-3">
-                        Purchase orders and corrugation runs logged
-                      </div>
-
-                      <div className="drawer-micro-stats">
-                        <div className="drawer-micro-card">
-                          <div className="label"><Package className="w-3 h-3 text-muted-foreground" /> Orders</div>
-                          <div className="value">{number(partyOrders.length)}</div>
-                        </div>
-                        <div className="drawer-micro-card">
-                          <div className="label"><Clock className="w-3 h-3 text-warning" /> In Prod</div>
-                          <div className="value">{number(partyInProdCount)}</div>
-                        </div>
-                        <div className="drawer-micro-card">
-                          <div className="label"><CheckCircle2 className="w-3 h-3 text-success" /> Completed</div>
-                          <div className="value">{number(partyCompletedCount)}</div>
-                        </div>
-                        <div className="drawer-micro-card">
-                          <div className="label"><Layers className="w-3 h-3 text-primary" /> Spend</div>
-                          <div className="value">{money(partyTotalSpent)}</div>
                         </div>
                       </div>
                     </div>
@@ -390,26 +570,21 @@ export function MasterPage({kind}:{kind:Kind}){
                 </div>
 
                 {/* Pinned Drawer Footer */}
-                <div className="p-4 border-t border-border bg-background flex justify-between items-center">
-                  <span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer underline">
-                    Need help? Ask us.
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setEditing(activeParty);
-                        setViewPartyId(null);
-                        setOpen(true);
-                      }}
-                    >
-                      Edit Details
-                    </Button>
-                    <Button variant="default" size="sm" onClick={() => setViewPartyId(null)}>
-                      Done
-                    </Button>
-                  </div>
+                <div className="p-4 border-t border-border bg-background flex justify-end items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(activeParty);
+                      setViewPartyId(null);
+                      setOpen(true);
+                    }}
+                  >
+                    Edit Details
+                  </Button>
+                  <Button variant="default" size="sm" onClick={() => setViewPartyId(null)}>
+                    Done
+                  </Button>
                 </div>
               </>
             )}

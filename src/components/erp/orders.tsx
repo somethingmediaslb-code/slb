@@ -2,16 +2,17 @@ import {useEffect,useState} from 'react';
 import {useSearch} from '@tanstack/react-router';
 import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid} from 'lucide-react';
 import {Button} from '@/components/ui/button';
+import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,MiniSparkline} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline} from './common';
 import {money,number,dateLabel,today,downloadCsv} from '@/lib/erp-data';
 
 const freshLine=()=>({sr_no:1,box_type:'',code_remarks:'',size_dimensions:'',specification:'',ordered_qty:1,unit_rate:0,priority_signal:'Yellow'});
 
 export function Orders(){
-  const {data:d,user,signIn,action}=useFactory();
+  const {data:d,user,signIn,action,isAdmin}=useFactory();
   const searchParams=useSearch({strict:false}) as {new?:boolean};
   const [open,setOpen]=useState(false);
   const [viewMode,setViewMode]=useState<'list'|'board'>('list');
@@ -19,10 +20,15 @@ export function Orders(){
   const [statusTab,setStatusTab]=useState('All');
   const [partyFilter,setPartyFilter]=useState('All');
   const [mediumFilter,setMediumFilter]=useState('All');
+  const [page,setPage]=useState(1);
+  const pageSize=10;
   const [stock,setStock]=useState(false);
   const [lines,setLines]=useState([freshLine()]);
   const [busy,setBusy]=useState(false);
   const [viewOrderId,setViewOrderId]=useState<string|null>(null);
+  const [closeShortOrderId,setCloseShortOrderId]=useState<string|null>(null);
+  const [closeShortReason,setCloseShortReason]=useState('');
+  const [closeShortBusy,setCloseShortBusy]=useState(false);
 
   useEffect(()=>{
     if(searchParams.new&&user)setOpen(true);
@@ -40,6 +46,7 @@ export function Orders(){
   // Compute status counts for ViewTabs
   const pendingCount=d.orders.filter(o=>o.status==='Pending').length;
   const prodCount=d.orders.filter(o=>o.status==='In Production').length;
+  const partDispCount=d.orders.filter(o=>o.status==='Partially Dispatched').length;
   const dispCount=d.orders.filter(o=>o.status==='Dispatched').length;
   const doneCount=d.orders.filter(o=>o.status==='Completed').length;
 
@@ -47,6 +54,7 @@ export function Orders(){
     {id:'All',label:'All Orders',count:d.orders.length},
     {id:'Pending',label:'Pending',count:pendingCount},
     {id:'In Production',label:'In Production',count:prodCount},
+    {id:'Partially Dispatched',label:'Partially Dispatched',count:partDispCount},
     {id:'Dispatched',label:'Dispatched',count:dispCount},
     {id:'Completed',label:'Completed',count:doneCount},
   ];
@@ -58,6 +66,12 @@ export function Orders(){
     const matchesSearch=(o.order_no+' '+company(o.party_id)+' '+(o.remarks??'')).toLowerCase().includes(search.toLowerCase());
     return matchesTab&&matchesParty&&matchesMedium&&matchesSearch;
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusTab, partyFilter, mediumFilter]);
+
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   // Calculate live totals for footer dock
   const totalVolume=filtered.reduce((sum,o)=>{
@@ -107,7 +121,7 @@ export function Orders(){
 
   return (
     <>
-      <Heading title="Order Pipeline">
+      <Heading title="Order Entry">
         <ExportButton onClick={()=>downloadCsv('orders',filtered.map(o=>({...o,company:o.is_self_stock?'Self Stocking':company(o.party_id)})))}/>
         <AddButton onClick={add}>New order</AddButton>
       </Heading>
@@ -145,32 +159,22 @@ export function Orders(){
           ]}
         />
 
-        <div className="ml-auto flex items-center gap-2">
-          <div className="view-mode-toggle">
-            <button
-              type="button"
-              className={`view-mode-btn ${viewMode === 'list' ? 'active' : ''}`}
-              onClick={() => setViewMode('list')}
-            >
-              <List className="w-3.5 h-3.5" />
-              <span>Table</span>
-            </button>
-            <button
-              type="button"
-              className={`view-mode-btn ${viewMode === 'board' ? 'active' : ''}`}
-              onClick={() => setViewMode('board')}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Deals Board</span>
-            </button>
-          </div>
+        <div className="ml-auto flex items-center">
+          <SegmentedControl
+            value={viewMode}
+            onChange={val => setViewMode(val as 'list' | 'board')}
+            options={[
+              { value: 'list', label: 'Table', icon: List },
+              { value: 'board', label: 'Board', icon: LayoutGrid },
+            ]}
+          />
         </div>
       </div>
 
       {viewMode === 'board' ? (
-        /* Deals Board (Kanban Columns) */
+        /* Orders Board (Kanban Columns) */
         <div className="deals-board">
-          {(['Pending', 'In Production', 'Dispatched', 'Completed'] as const).map(stage => {
+          {(['Pending', 'In Production', 'Partially Dispatched', 'Dispatched', 'Completed'] as const).map(stage => {
             const stageOrders = filtered.filter(o => o.status === stage);
             const stageValue = stageOrders.reduce((sum, o) => {
               const items = d.items.filter(i => i.order_id === o.id);
@@ -223,7 +227,7 @@ export function Orders(){
                             {firstItem?.specification ? (
                               <CrmTag label={firstItem.specification} variant="blue" />
                             ) : (
-                              <CrmTag label="Corrugated" variant="neutral" />
+                              <CrmTag label="Wooden Box" variant="neutral" />
                             )}
                             {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
                             {o.medium && <CrmTag label={o.medium} variant="green" />}
@@ -259,137 +263,223 @@ export function Orders(){
           })}
         </div>
       ) : (
-        /* Main Table */
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th className="w-8">
-                  <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label="Select all" readOnly />
-                </th>
-                <th>Order ID</th>
-                <th>Customer / Account</th>
-                <th>Spec & Tags</th>
-                <th>Order Date</th>
-                <th>Due Date</th>
-                <th className="numeric">Units</th>
-                <th className="numeric">Order Value</th>
-                <th>Fulfilment</th>
-                <th>Activity Trend</th>
-                <th>Status</th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length ? filtered.map(o=>{
-                const items=d.items.filter(i=>i.order_id===o.id);
-                const ordered=items.reduce((s,i)=>s+i.ordered_qty,0);
-                const completed=items.reduce((s,i)=>s+i.completed_qty,0);
-                const value=items.reduce((s,i)=>s+(i.total_price??0),0);
-                const firstItem=items[0];
-                return (
-                  <tr
-                    key={o.id}
-                    className="clickable-row"
-                    onClick={()=>setViewOrderId(o.id)}
-                    title="Click to view full details"
-                  >
-                    <td onClick={e=>e.stopPropagation()}>
-                      <input type="checkbox" className="w-3.5 h-3.5 rounded border-border" aria-label={`Select ${o.order_no}`} />
-                    </td>
-                    <td className="font-medium text-foreground">{o.order_no}</td>
-                    <td>
-                      <div className="flex items-center gap-2.5">
-                        <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
-                          {o.is_self_stock ? 'SS' : company(o.party_id).slice(0,2).toUpperCase()}
+        <>
+          {/* Main Desktop Table */}
+          <div className="desktop-table-view table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="w-8">
+                    <Checkbox aria-label="Select all" />
+                  </th>
+                  <th>Order ID</th>
+                  <th>Customer / Account</th>
+                  <th>Spec & Tags</th>
+                  <th>Order Date</th>
+                  <th>Due Date</th>
+                  <th className="numeric">Units</th>
+                  <th className="numeric">Order Value</th>
+                  <th>Fulfilment</th>
+                  <th>Status</th>
+                  <th className="w-8 text-right"><span className="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.length ? paginated.map(o=>{
+                  const items=d.items.filter(i=>i.order_id===o.id);
+                  const ordered=items.reduce((s,i)=>s+i.ordered_qty,0);
+                  const completed=items.reduce((s,i)=>s+i.completed_qty,0);
+                  const value=items.reduce((s,i)=>s+(i.total_price??0),0);
+                  const firstItem=items[0];
+                  return (
+                    <tr
+                      key={o.id}
+                      className="clickable-row"
+                      onClick={()=>setViewOrderId(o.id)}
+                      title="Click to view full details"
+                    >
+                      <td onClick={e=>e.stopPropagation()}>
+                        <Checkbox aria-label={`Select ${o.order_no}`} />
+                      </td>
+                      <td className="font-medium text-foreground">{o.order_no}</td>
+                      <td>
+                        <div className="flex items-center gap-2.5">
+                          <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
+                            {o.is_self_stock ? 'SS' : company(o.party_id).slice(0,2).toUpperCase()}
+                          </span>
+                          <span className="font-medium text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          {firstItem?.specification ? (
+                            <CrmTag label={firstItem.specification} variant="blue" />
+                          ) : (
+                            <CrmTag label="Wooden Box" variant="neutral" />
+                          )}
+                          {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
+                          {items.length > 1 && <CrmTag label={`+${items.length - 1}`} variant="neutral" />}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span className="text-foreground">{dateLabel(o.order_date)}</span>
+                          <span className="text-muted-foreground/60">|</span>
+                          <span className="text-muted-foreground">{o.medium || 'Direct'}</span>
+                        </div>
+                      </td>
+                      <td className="text-xs text-muted-foreground whitespace-nowrap">{dateLabel(o.expected_date)}</td>
+                      <td className="numeric font-medium">{number(ordered)}</td>
+                      <td className="numeric font-medium text-foreground">{money(value)}</td>
+                      <td>
+                        <SegmentedMeter value={completed} total={ordered} />
+                      </td>
+                      <td><Pill value={o.status}/></td>
+                      <td className="text-right" onClick={e=>e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="View order options"
+                          title="View order options"
+                          onClick={()=>setViewOrderId(o.id)}
+                        >
+                          <MoreHorizontal className="w-4 h-4"/>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <Empty columns={11} label="No matching orders found"/>
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-muted/20 font-medium">
+                  <td colSpan={6} className="text-right text-xs text-muted-foreground font-semibold px-3 py-2.5">
+                    Totals ({number(filtered.length)} orders):
+                  </td>
+                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                    {number(totalVolume)}
+                  </td>
+                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                    {money(totalValue)}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">
+                    {number(totalCompleted)} produced
+                  </td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Mobile Phone Card View (No Horizontal Sliding Required) */}
+          <div className="mobile-card-view">
+            {paginated.length ? paginated.map(o => {
+              const items = d.items.filter(i => i.order_id === o.id);
+              const ordered = items.reduce((s, i) => s + i.ordered_qty, 0);
+              const completed = items.reduce((s, i) => s + i.completed_qty, 0);
+              const value = items.reduce((s, i) => s + (i.total_price ?? 0), 0);
+              const firstItem = items[0];
+              return (
+                <div
+                  key={o.id}
+                  className="mobile-record-card"
+                  onClick={() => setViewOrderId(o.id)}
+                >
+                  <div className="mobile-card-top">
+                    <div className="mobile-card-title-group">
+                      <div className="flex items-center gap-2">
+                        <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
+                          {o.is_self_stock ? 'SS' : company(o.party_id).slice(0, 2).toUpperCase()}
                         </span>
-                        <span className="font-medium text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
+                        <div className="mobile-card-title">
+                          {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
+                        </div>
                       </div>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {firstItem?.specification ? (
-                          <CrmTag label={firstItem.specification} variant="blue" />
-                        ) : (
-                          <CrmTag label="Corrugated" variant="neutral" />
-                        )}
-                        {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
-                        {o.medium && <CrmTag label={o.medium} variant="green" />}
-                        {items.length > 1 && <CrmTag label={`+${items.length - 1}`} variant="neutral" />}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                        <span className="text-foreground">{dateLabel(o.order_date)}</span>
-                        <span className="text-muted-foreground/60">|</span>
-                        <span className="text-muted-foreground">{o.medium || 'Direct'}</span>
-                      </div>
-                    </td>
-                    <td className="text-xs text-muted-foreground">{dateLabel(o.expected_date)}</td>
-                    <td className="numeric font-medium">{number(ordered)}</td>
-                    <td className="numeric font-medium text-foreground">{money(value)}</td>
-                    <td>
+                      <div className="mobile-card-sub">{o.order_no} · {dateLabel(o.order_date)}</div>
+                    </div>
+                    <Pill value={o.status} />
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {firstItem?.specification && (
+                      <CrmTag label={firstItem.specification} variant="blue" />
+                    )}
+                    {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
+                    {o.medium && <CrmTag label={o.medium} variant="green" />}
+                  </div>
+
+                  <div className="mobile-card-grid">
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Units</span>
+                      <span className="mobile-card-value">{number(ordered)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Order Value</span>
+                      <span className="mobile-card-value">{money(value)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Due Date</span>
+                      <span className="mobile-card-value">{dateLabel(o.expected_date)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Fulfilment</span>
+                      <span className="mobile-card-value">
+                        {ordered > 0 ? Math.round((completed / ordered) * 100) : 0}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions">
+                    <div className="flex-1">
                       <SegmentedMeter value={completed} total={ordered} />
-                    </td>
-                    <td>
-                      <MiniSparkline />
-                    </td>
-                    <td><Pill value={o.status}/></td>
-                    <td onClick={e=>e.stopPropagation()}>
-                      <button
-                        type="button"
-                        className="dots-btn"
-                        aria-label="View order options"
-                        title="View order options"
-                        onClick={()=>setViewOrderId(o.id)}
-                      >
-                        <MoreHorizontal className="w-4 h-4"/>
-                      </button>
-                    </td>
-                  </tr>
-                );
-              }) : (
-                <Empty columns={12} label="No matching orders found"/>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="crm-btn crm-btn-secondary !h-7 !text-xs !px-3"
+                      onClick={(e) => { e.stopPropagation(); setViewOrderId(o.id); }}
+                    >
+                      Inspect
+                    </button>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="p-8 text-center text-sm text-muted-foreground bg-card border border-border rounded-xl">
+                No matching orders found
+              </div>
+            )}
+          </div>
+
+          <Pagination
+            currentPage={page}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
-      {/* Bottom Pinned Calculation Bar */}
-      <TableCalcBar
-        count={filtered.length}
-        entityName="orders"
-        stats={[
-          {label:'Total Volume',value:`${number(totalVolume)} boxes`},
-          {label:'Pipeline Value',value:money(totalValue)},
-          {label:'Produced',value:`${number(totalCompleted)} boxes`},
-        ]}
-      />
 
       {/* Slide-over Inspection Sheet (CRM Details Drawer - Screenshot 5) */}
       <Sheet open={!!viewOrderId} onOpenChange={open=>!open&&setViewOrderId(null)}>
-        <SheetContent side="right" className="sm:max-w-xl w-full p-0 flex flex-col bg-card overflow-hidden">
+        <SheetContent side="right" className="sm:max-w-xl w-full p-0 flex flex-col bg-card overflow-hidden h-full max-h-screen">
           {activeOrder && (
             <>
-              <div className="p-6 border-b border-border bg-background">
-                <SheetHeader className="text-left space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      <ClipboardList className="w-4 h-4 text-primary" />
-                      <span>Order Details</span>
-                    </div>
-                    <Pill value={activeOrder.status} />
-                  </div>
+              <div className="p-6 pr-14 border-b border-border bg-background">
+                <SheetHeader className="text-left">
                   <div className="drawer-hero-box">
                     <div className="drawer-hero-monogram">
                       {activeOrder.is_self_stock ? 'SS' : company(activeOrder.party_id).slice(0, 2).toUpperCase()}
                     </div>
                     <div>
-                      <SheetTitle className="text-xl font-medium tracking-tight">
-                        {activeOrder.order_no}
-                      </SheetTitle>
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <SheetTitle className="text-xl font-medium tracking-tight">
+                          {activeOrder.order_no}
+                        </SheetTitle>
+                        <Pill value={activeOrder.status} />
+                      </div>
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                         <CrmTag label={activeOrder.is_self_stock ? 'Self Stocking' : company(activeOrder.party_id)} variant="blue" />
                         {activeItems[0]?.specification && <CrmTag label={activeItems[0].specification} variant="purple" />}
@@ -415,7 +505,7 @@ export function Orders(){
                           {activeOrder.is_self_stock ? 'Internal Factory Stock' : company(activeOrder.party_id)}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {activeOrder.remarks ? activeOrder.remarks : 'Order registered in plant pipeline'}
+                          {activeOrder.remarks ? activeOrder.remarks : 'Order registered in factory queue'}
                         </span>
                       </div>
                     </div>
@@ -436,109 +526,65 @@ export function Orders(){
                   </div>
                 </div>
 
-                {/* Pipeline Health (Screenshot 5) */}
+                {/* Fulfillment Health */}
                 <div>
-                  <div className="drawer-section-label">Pipeline Health</div>
-                  <div className="p-4 bg-background border border-border rounded-lg">
-                    <div className="drawer-health-headline">
-                      {activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%
-                    </div>
-                    <div className="drawer-health-sub">
-                      Fulfilment health across scheduled corrugation and converting runs
+                  <div className="drawer-section-label">Order Fulfilment Health</div>
+                  <div className="p-4 bg-background border border-border rounded-lg space-y-4">
+                    <div className="flex items-baseline gap-3 pb-2 border-b border-border/60">
+                      <div className="text-3xl font-semibold text-foreground tabular-nums">
+                        {activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Fulfilment health across scheduled production runs
+                      </div>
                     </div>
 
                     <div className="space-y-3 pt-1">
-                      {/* Stage 1: Planning */}
-                      <div className="stage-meter-row">
-                        <div className="stage-meter-header">
-                          <span>Paper Planning & Slitting</span>
-                          <span>100%</span>
+                      {/* Stage 1: Timber Cutting & Sizing */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-medium text-foreground">Timber Cutting & Sizing</span>
+                          <span className="text-muted-foreground tabular-nums font-medium">100%</span>
                         </div>
-                        <div className="stage-meter-track">
-                          {Array.from({ length: 28 }).map((_, i) => (
-                            <span key={i} className="stage-meter-bar active-stage-green" />
-                          ))}
+                        <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full w-full" />
                         </div>
                       </div>
 
-                      {/* Stage 2: Corrugation & Pasting */}
-                      <div className="stage-meter-row">
-                        <div className="stage-meter-header">
-                          <span>Corrugation & Converting</span>
-                          <span>{activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%</span>
+                      {/* Stage 2: Box Assembly & Finishing */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-medium text-foreground">Box Assembly & Finishing</span>
+                          <span className="text-muted-foreground tabular-nums font-medium">
+                            {activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%
+                          </span>
                         </div>
-                        <div className="stage-meter-track">
-                          {Array.from({ length: 28 }).map((_, i) => {
-                            const pct = activeTotalQty > 0 ? activeCompletedQty / activeTotalQty : 0;
-                            const isActive = i < Math.round(pct * 28);
-                            return (
-                              <span
-                                key={i}
-                                className={`stage-meter-bar ${isActive ? (pct >= 0.8 ? 'active-stage-green' : 'active-stage-amber') : ''}`}
-                              />
-                            );
-                          })}
+                        <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                          <div
+                            className="h-full bg-primary rounded-full transition-all duration-300"
+                            style={{
+                              width: `${activeTotalQty > 0 ? Math.min(100, Math.round((activeCompletedQty / activeTotalQty) * 100)) : 0}%`
+                            }}
+                          />
                         </div>
                       </div>
 
-                      {/* Stage 3: Dispatch & Logistics */}
-                      <div className="stage-meter-row">
-                        <div className="stage-meter-header">
-                          <span>Dispatch & Logistics</span>
-                          <span>{activeTotalQty > 0 ? Math.round((activeDispatchedQty / activeTotalQty) * 100) : 0}%</span>
+                      {/* Stage 3: Dispatch & Delivery Challan */}
+                      <div className="space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="font-medium text-foreground">Dispatch & Delivery Challan</span>
+                          <span className="text-muted-foreground tabular-nums font-medium">
+                            {activeTotalQty > 0 ? Math.round((activeDispatchedQty / activeTotalQty) * 100) : 0}%
+                          </span>
                         </div>
-                        <div className="stage-meter-track">
-                          {Array.from({ length: 28 }).map((_, i) => {
-                            const pct = activeTotalQty > 0 ? activeDispatchedQty / activeTotalQty : 0;
-                            const isActive = i < Math.round(pct * 28);
-                            return (
-                              <span
-                                key={i}
-                                className={`stage-meter-bar ${isActive ? 'active-stage-green' : ''}`}
-                              />
-                            );
-                          })}
+                        <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                            style={{
+                              width: `${activeTotalQty > 0 ? Math.min(100, Math.round((activeDispatchedQty / activeTotalQty) * 100)) : 0}%`
+                            }}
+                          />
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Activity Trend (Screenshot 5) */}
-                <div>
-                  <div className="drawer-section-label">
-                    <span>Activity Trend</span>
-                    <span className="text-[11px] font-normal text-muted-foreground border border-border px-2 py-0.5 rounded-full bg-card">
-                      Last 30 Days ▾
-                    </span>
-                  </div>
-                  <div className="p-4 bg-background border border-border rounded-lg">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl font-medium text-foreground">
-                        {activeItems.length * 14 + 18}
-                      </span>
-                      <MiniSparkline />
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1 mb-3">
-                      Spikes around corrugation schedule and dispatch review
-                    </div>
-
-                    <div className="drawer-micro-stats">
-                      <div className="drawer-micro-card">
-                        <div className="label"><Package className="w-3 h-3 text-muted-foreground" /> Ordered</div>
-                        <div className="value">{number(activeTotalQty)}</div>
-                      </div>
-                      <div className="drawer-micro-card">
-                        <div className="label"><CheckCircle2 className="w-3 h-3 text-success" /> Produced</div>
-                        <div className="value">{number(activeCompletedQty)}</div>
-                      </div>
-                      <div className="drawer-micro-card">
-                        <div className="label"><Clock className="w-3 h-3 text-warning" /> Dispatched</div>
-                        <div className="value">{number(activeDispatchedQty)}</div>
-                      </div>
-                      <div className="drawer-micro-card">
-                        <div className="label"><Layers className="w-3 h-3 text-primary" /> Value</div>
-                        <div className="value">{money(activeTotalValue)}</div>
                       </div>
                     </div>
                   </div>
@@ -586,13 +632,25 @@ export function Orders(){
                 </div>
               </div>
 
-              {/* Pinned Footer (Screenshot 5: Need help? on left, Cancel + Save/Export on right) */}
-              <div className="p-4 border-t border-border bg-background flex justify-between items-center">
-                <span className="text-xs text-muted-foreground hover:text-foreground cursor-pointer underline">
-                  Need help? Ask us.
-                </span>
+              {/* Pinned Footer: Destructive outline on left, Secondary + Primary on right */}
+              <div className="p-4 border-t border-border bg-background flex justify-between items-center gap-3">
+                <div>
+                  {isAdmin && activeOrder.status !== 'Completed' && activeOrder.status !== 'Cancelled' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => {
+                        setCloseShortOrderId(activeOrder.id);
+                        setCloseShortReason('');
+                      }}
+                    >
+                      Close order short
+                    </Button>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}>
+                  <Button variant="secondary" size="sm" onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}>
                     Export CSV
                   </Button>
                   <Button variant="default" size="sm" onClick={() => setViewOrderId(null)}>
@@ -614,9 +672,9 @@ export function Orders(){
           </div>
 
           <form onSubmit={submit}>
-            <label className="toggle-check mb-5">
-              <input type="checkbox" checked={stock} onChange={e=>setStock(e.target.checked)}/>
-              Self-stocking run (internal factory inventory)
+            <label className="toggle-check mb-5 flex items-center gap-2.5 cursor-pointer text-sm font-medium">
+              <Checkbox checked={stock} onCheckedChange={checked => setStock(Boolean(checked))} />
+              <span>Self-stocking run (internal factory inventory)</span>
             </label>
 
             {/* Section 1: Metadata */}
@@ -624,24 +682,31 @@ export function Orders(){
             <div className="form-grid">
               <label className="form-wide">
                 Client / Company
-                <select aria-label="Company" name="party_id" required={!stock} disabled={stock}>
-                  <option value="">{stock?'Self Stocking':'Select company'}</option>
-                  {d.parties.map(p=><option key={p.id} value={p.id}>{p.company_name}</option>)}
-                </select>
+                <ThemedSelect
+                  aria-label="Company"
+                  name="party_id"
+                  required={!stock}
+                  disabled={stock}
+                  placeholder={stock ? 'Self Stocking' : 'Select company'}
+                  options={d.parties.map(p => ({ value: p.id, label: p.company_name }))}
+                />
               </label>
               <label>
                 Order Date
-                <input type="date" name="order_date" defaultValue={today()} required/>
+                <ThemedDatePicker aria-label="Order Date" name="order_date" defaultValue={today()} required />
               </label>
               <label>
                 Target Delivery Date
-                <input type="date" name="expected_date" defaultValue={today()} required/>
+                <ThemedDatePicker aria-label="Target Delivery Date" name="expected_date" defaultValue={today()} required />
               </label>
               <label>
                 Intake Medium
-                <select aria-label="Order medium" name="medium">
-                  {['WhatsApp','Call','Mail','Other'].map(m=><option key={m}>{m}</option>)}
-                </select>
+                <ThemedSelect
+                  aria-label="Order medium"
+                  name="medium"
+                  defaultValue="WhatsApp"
+                  options={['WhatsApp', 'Call', 'Mail', 'Other']}
+                />
               </label>
               <label>
                 General Remarks / Delivery Instructions
@@ -693,8 +758,9 @@ export function Orders(){
                     </label>
                     <label>
                       Size Dimensions
-                      <input
+                      <textarea
                         required
+                        rows={2}
                         placeholder="L x W x H (inches / mm)"
                         value={l.size_dimensions}
                         onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,size_dimensions:e.target.value}:x))}
@@ -703,7 +769,7 @@ export function Orders(){
                     <label>
                       Specification
                       <input
-                        placeholder="Ply, GSM, Flute type"
+                        placeholder="Timber / Plywood type, thickness, finish, joint type"
                         value={l.specification}
                         onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,specification:e.target.value}:x))}
                       />
@@ -731,20 +797,17 @@ export function Orders(){
                     </label>
                     <label>
                       Priority Level
-                      <select
+                      <ThemedSelect
                         value={l.priority_signal}
-                        onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,priority_signal:e.target.value}:x))}
-                      >
-                        <option value="Red">High Priority · Red</option>
-                        <option value="Yellow">Medium Priority · Yellow</option>
-                        <option value="Green">Standard Priority · Green</option>
-                      </select>
+                        onChange={val => setLines(lines.map((x,i)=>i===index?{...x,priority_signal:val}:x))}
+                        options={['Red', 'Yellow', 'Green']}
+                      />
                     </label>
                     <label className="form-wide">
                       Code / Item Remarks
                       <textarea
                         value={l.code_remarks}
-                        placeholder="Printing notes, die number, etc."
+                        placeholder="Stencil notes, hardware details, treatment, etc."
                         onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,code_remarks:e.target.value}:x))}
                       />
                     </label>
@@ -783,6 +846,84 @@ export function Orders(){
               <Button type="submit" disabled={busy}>{busy?'Saving…':'Create Order'}</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Close Order Short Dialog (Admin only) */}
+      <Dialog open={!!closeShortOrderId} onOpenChange={(o) => { if (!o) setCloseShortOrderId(null); }}>
+        <DialogContent className="modal-wide" aria-describedby={undefined}>
+          <DialogTitle className="text-xl font-medium">Close Order Short</DialogTitle>
+          <div className="form-subtitle">
+            Mark order as fulfilled and cancel remaining unproduced/undispatched balance. Requires admin approval.
+          </div>
+          {(() => {
+            const targetOrder = d.orders.find(o => o.id === closeShortOrderId);
+            if (!targetOrder) return null;
+            return (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (closeShortReason.trim().length < 5) return;
+                setCloseShortBusy(true);
+                const ok = await action('close_order_short', {
+                  order_id: targetOrder.id,
+                  reason: closeShortReason.trim()
+                });
+                setCloseShortBusy(false);
+                if (ok) {
+                  setCloseShortOrderId(null);
+                  setCloseShortReason('');
+                }
+              }}>
+                <div className="p-3 bg-card border border-border rounded-xl mb-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-muted-foreground block">Order #</span>
+                      <strong className="text-foreground text-sm">{targetOrder.order_no}</strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Client</span>
+                      <strong className="text-foreground text-sm">{company(targetOrder.party_id)}</strong>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground block">Current Status</span>
+                      <Pill value={targetOrder.status} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-foreground block">
+                    Reason for Closing Short (minimum 5 characters) *
+                    <textarea
+                      required
+                      minLength={5}
+                      rows={3}
+                      value={closeShortReason}
+                      onChange={(e) => setCloseShortReason(e.target.value)}
+                      placeholder="e.g. Client requested delivery cancellation for remaining units."
+                      className="w-full mt-1.5 p-2.5 rounded-lg border border-border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </label>
+                  {closeShortReason.trim().length > 0 && closeShortReason.trim().length < 5 && (
+                    <p className="text-xs text-destructive">Reason must be at least 5 characters.</p>
+                  )}
+                </div>
+
+                <div className="form-actions mt-5">
+                  <Button type="button" variant="outline" onClick={() => setCloseShortOrderId(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="destructive"
+                    disabled={closeShortBusy || closeShortReason.trim().length < 5}
+                  >
+                    {closeShortBusy ? 'Closing…' : 'Confirm Close Short'}
+                  </Button>
+                </div>
+              </form>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </>
