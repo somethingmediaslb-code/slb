@@ -32,14 +32,51 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
+  const [showResend, setShowResend] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [infoNotice, setInfoNotice] = useState('');
   const navigate = useNavigate();
   const { user } = useFactory();
+
+  // Detect URL auth errors (e.g., expired confirmation links or OAuth errors)
+  useState(() => {
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const errDesc = searchParams.get('error_description') || hashParams.get('error_description');
+      const errCode = searchParams.get('error_code') || hashParams.get('error_code');
+      if (errDesc) {
+        setError(decodeURIComponent(errDesc.replace(/\+/g, ' ')));
+        setShowResend(true);
+      } else if (errCode) {
+        setError(`Authentication error: ${errCode}`);
+      }
+    }
+  });
 
   const handleGoogleSignIn = async () => {
     setBusy(true);
     setError('');
+    setInfoNotice('');
     try {
+      // Safe check: probe whether Google OAuth is enabled in Supabase backend
+      const authUrl = `https://noiuvevcvxlxqmrkqjpn.supabase.co/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
+      const probeRes = await fetch(authUrl, {
+        headers: { apikey: 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
+      }).catch(() => null);
+
+      if (probeRes && !probeRes.ok) {
+        const body = await probeRes.json().catch(() => null);
+        if (body?.msg?.includes('not enabled') || body?.error_code === 'validation_failed') {
+          setError('Google Sign-In is not enabled on this Supabase project yet. Please sign in using your work email & password below.');
+          setBusy(false);
+          return;
+        }
+      }
+
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -57,6 +94,8 @@ export function LoginPage() {
     e.preventDefault();
     setBusy(true);
     setError('');
+    setInfoNotice('');
+    setShowResend(false);
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
@@ -66,9 +105,70 @@ export function LoginPage() {
       toast.success('Signed in successfully');
       navigate({ to: '/' });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to sign in. Please verify your credentials.');
+      const msg = err instanceof Error ? err.message : 'Unable to sign in. Please verify your credentials.';
+      const lower = msg.toLowerCase();
+      if (lower.includes('invalid login credentials') || lower.includes('invalid_credentials')) {
+        setError('Invalid email or password. If you recently created your account, your email may still be unconfirmed.');
+        setShowResend(true);
+      } else if (lower.includes('email not confirmed')) {
+        setError('Your email is not verified yet. Please click the activation link in your email, or resend below.');
+        setShowResend(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!email.trim()) {
+      toast.error('Please enter your email address first');
+      return;
+    }
+    setResending(true);
+    try {
+      const { error: resendErr } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (resendErr) throw resendErr;
+      toast.success(`Verification email sent to ${email.trim()}!`);
+      setInfoNotice(`Verification email sent to ${email.trim()}. Please check your inbox and spam folder.`);
+      setError('');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not resend email';
+      if (msg.includes('rate_limit') || msg.includes('over_email_send_rate_limit')) {
+        toast.error('Supabase email limit reached. Please wait a few minutes or disable "Confirm email" in Supabase settings.');
+      } else {
+        toast.error(msg);
+      }
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      toast.error('Please enter your email above to receive password reset instructions');
+      return;
+    }
+    setResetting(true);
+    try {
+      const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (resetErr) throw resetErr;
+      toast.success('Password reset link sent to your email');
+      setInfoNotice(`Password reset instructions sent to ${email.trim()}. Check your inbox.`);
+      setError('');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Could not send reset email');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -108,7 +208,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
       <div
-        className="w-full max-w-[390px] p-7 sm:p-8 rounded-3xl border border-border bg-card flex flex-col gap-5 text-card-foreground shadow-sm"
+        className="w-full max-w-[400px] p-7 sm:p-8 rounded-3xl border border-border bg-card flex flex-col gap-5 text-card-foreground shadow-sm"
         style={{ boxShadow: 'none' }}
       >
         {/* Brand emblem pill */}
@@ -167,14 +267,40 @@ export function LoginPage() {
           </span>
         </div>
 
-        {/* Feedback message */}
+        {/* Feedback messages */}
         {error && (
           <div
-            className="p-3 rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive text-xs flex items-center gap-2"
+            className="p-3.5 rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive text-xs flex flex-col gap-2"
             style={{ boxShadow: 'none' }}
           >
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>{error}</span>
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
+
+            {showResend && (
+              <div className="pt-1 flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={resending}
+                  onClick={handleResendEmail}
+                  className="px-3 py-1.5 rounded-full bg-destructive/15 hover:bg-destructive/25 text-destructive font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                  <span>Resend verification email</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {infoNotice && (
+          <div
+            className="p-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 text-xs flex items-center gap-2"
+            style={{ boxShadow: 'none' }}
+          >
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="leading-relaxed">{infoNotice}</span>
           </div>
         )}
 
@@ -191,16 +317,28 @@ export function LoginPage() {
             style={{ boxShadow: 'none' }}
           />
 
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter your password"
-            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
-            style={{ boxShadow: 'none' }}
-          />
+          <div className="flex flex-col gap-1">
+            <input
+              type="password"
+              required
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
+              style={{ boxShadow: 'none' }}
+            />
+            <div className="flex justify-end px-1 pt-1">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetting}
+                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                {resetting ? 'Sending link…' : 'Forgot password?'}
+              </button>
+            </div>
+          </div>
 
           <button
             type="submit"
@@ -214,10 +352,10 @@ export function LoginPage() {
         </form>
 
         {/* Bottom switch link */}
-        <div className="text-center pt-1">
+        <div className="text-center pt-1 flex flex-col gap-2">
           <Link
             to="/signup"
-            className="inline-block px-4 py-2 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="inline-block px-4 py-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             style={{ boxShadow: 'none' }}
           >
             Don&apos;t have an account? Sign up
@@ -233,15 +371,33 @@ export function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
   const [successNotice, setSuccessNotice] = useState('');
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const navigate = useNavigate();
   const { user } = useFactory();
 
   const handleGoogleSignUp = async () => {
     setBusy(true);
     setError('');
+    setSuccessNotice('');
     try {
+      // Safe check: probe whether Google OAuth is enabled in Supabase backend
+      const authUrl = `https://noiuvevcvxlxqmrkqjpn.supabase.co/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
+      const probeRes = await fetch(authUrl, {
+        headers: { apikey: 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
+      }).catch(() => null);
+
+      if (probeRes && !probeRes.ok) {
+        const body = await probeRes.json().catch(() => null);
+        if (body?.msg?.includes('not enabled') || body?.error_code === 'validation_failed') {
+          setError('Google Sign-In is not enabled on this Supabase project yet. Please create your account with work email & password below.');
+          setBusy(false);
+          return;
+        }
+      }
+
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -262,11 +418,13 @@ export function SignupPage() {
       return;
     }
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError('Password must be at least 8 characters long');
       return;
     }
     setBusy(true);
     setError('');
+    setSuccessNotice('');
+    setAlreadyRegistered(false);
     try {
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
@@ -278,15 +436,48 @@ export function SignupPage() {
       if (signUpError) throw signUpError;
 
       if (!data.session) {
-        setSuccessNotice('Verification email sent! Click the link in your email to activate your account.');
+        // If identities is an empty array, the user already exists in Supabase
+        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+          setError('An account with this email already exists. Please sign in instead.');
+          setAlreadyRegistered(true);
+        } else {
+          setSuccessNotice(`Verification email sent to ${email.trim()}! Please check your inbox and spam folder to activate your account.`);
+          toast.success('Account created! Please check your email.');
+        }
       } else {
         toast.success('Account created successfully');
         navigate({ to: '/' });
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to create account');
+      const msg = err instanceof Error ? err.message : 'Unable to create account';
+      if (msg.toLowerCase().includes('weak') || msg.toLowerCase().includes('pwned') || msg.toLowerCase().includes('easy to guess')) {
+        setError('This password is too common or easily guessed. Please use a stronger password with a combination of letters, numbers, and symbols.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleResendSignupEmail = async () => {
+    if (!email.trim()) return;
+    setResending(true);
+    try {
+      const { error: resendErr } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      });
+      if (resendErr) throw resendErr;
+      toast.success('Verification email resent! Check your inbox.');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Could not resend email';
+      toast.error(msg);
+    } finally {
+      setResending(false);
     }
   };
 
@@ -326,7 +517,7 @@ export function SignupPage() {
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
       <div
-        className="w-full max-w-[390px] p-7 sm:p-8 rounded-3xl border border-border bg-card flex flex-col gap-5 text-card-foreground shadow-sm"
+        className="w-full max-w-[400px] p-7 sm:p-8 rounded-3xl border border-border bg-card flex flex-col gap-5 text-card-foreground shadow-sm"
         style={{ boxShadow: 'none' }}
       >
         {/* Brand emblem pill */}
@@ -388,21 +579,54 @@ export function SignupPage() {
         {/* Feedback messages */}
         {error && (
           <div
-            className="p-3 rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive text-xs flex items-center gap-2"
+            className="p-3.5 rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive text-xs flex flex-col gap-2"
             style={{ boxShadow: 'none' }}
           >
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span>{error}</span>
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{error}</span>
+            </div>
+
+            {alreadyRegistered && (
+              <div className="pt-1">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-destructive/15 hover:bg-destructive/25 text-destructive font-medium text-[11px] transition-colors"
+                >
+                  Go to Sign in &rarr;
+                </Link>
+              </div>
+            )}
           </div>
         )}
 
         {successNotice && (
           <div
-            className="p-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 text-xs flex items-center gap-2"
+            className="p-3.5 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 text-xs flex flex-col gap-2.5"
             style={{ boxShadow: 'none' }}
           >
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-            <span>{successNotice}</span>
+            <div className="flex items-start gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{successNotice}</span>
+            </div>
+
+            <div className="flex items-center gap-2 pt-0.5">
+              <button
+                type="button"
+                disabled={resending}
+                onClick={handleResendSignupEmail}
+                className="px-3 py-1 rounded-full bg-blue-500/15 hover:bg-blue-500/25 text-blue-500 font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                <span>Resend email</span>
+              </button>
+              <Link
+                to="/login"
+                className="text-[11px] font-medium underline hover:text-blue-600 transition-colors"
+              >
+                Go to Sign in
+              </Link>
+            </div>
           </div>
         )}
 
@@ -453,10 +677,10 @@ export function SignupPage() {
         </form>
 
         {/* Bottom switch link */}
-        <div className="text-center pt-1">
+        <div className="text-center pt-1 flex flex-col gap-2">
           <Link
             to="/login"
-            className="inline-block px-4 py-2 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="inline-block px-4 py-1.5 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             style={{ boxShadow: 'none' }}
           >
             Already have an account? Sign in
