@@ -21,6 +21,7 @@ import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as PartiesRouteImport } from './routes/parties'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as SignupRouteImport } from './routes/signup'
 
@@ -84,6 +85,11 @@ const ProfileRoute = ProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/parties': typeof PartiesRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
 }
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/parties': typeof PartiesRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
 }
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/parties': typeof PartiesRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
+  '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/signup': typeof SignupRoute
 }
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/parties'
     | '/production'
     | '/profile'
+    | '/reports'
     | '/settings'
     | '/signup'
   fileRoutesByTo: FileRoutesByTo
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/parties'
     | '/production'
     | '/profile'
+    | '/reports'
     | '/settings'
     | '/signup'
   id:
@@ -191,6 +202,7 @@ export interface FileRouteTypes {
     | '/parties'
     | '/production'
     | '/profile'
+    | '/reports'
     | '/settings'
     | '/signup'
   fileRoutesById: FileRoutesById
@@ -208,6 +220,7 @@ export interface RootRouteChildren {
   PartiesRoute: typeof PartiesRoute
   ProductionRoute: typeof ProductionRoute
   ProfileRoute: typeof ProfileRoute
+  ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
   SignupRoute: typeof SignupRoute
 }
@@ -298,6 +311,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -328,6 +348,7 @@ const rootRouteChildren: RootRouteChildren = {
   PartiesRoute: PartiesRoute,
   ProductionRoute: ProductionRoute,
   ProfileRoute: ProfileRoute,
+  ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
   SignupRoute: SignupRoute,
 }

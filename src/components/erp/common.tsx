@@ -44,7 +44,7 @@ export function AccessNotice(){
 export function SearchFilter({value,onChange,placeholder='Search records…'}:{value:string;onChange:(v:string)=>void;placeholder?:string}){
   return (
     <div className="crm-search-pill">
-      <Search className="size-3 text-[#898b8d] shrink-0"/>
+      <Search className="size-3 text-muted-foreground shrink-0"/>
       <input aria-label="Search records" placeholder={placeholder} value={value} onChange={e=>onChange(e.target.value)}/>
     </div>
   );
@@ -502,7 +502,7 @@ export function DateFilterPill({
       <PopoverContent
         align="start"
         sideOffset={6}
-        className="w-[264px] p-0 border border-[#232323] bg-[#171717] rounded-xl shadow-2xl text-foreground z-50 overflow-hidden"
+        className="w-[264px] p-0 border border-border bg-card rounded-xl shadow-2xl text-foreground z-50 overflow-hidden"
       >
         <ThemedCalendar
           value={value}
@@ -565,7 +565,7 @@ export function ThemedDatePicker({
             disabled={disabled}
             aria-label={ariaLabel || placeholder}
             className={cn(
-              "flex h-[38px] min-h-[38px] w-full items-center justify-between rounded-lg border border-border bg-[#181818] px-3 py-2 text-sm text-foreground shadow-sm hover:border-[#484848] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 transition-colors text-left",
+              "flex h-[38px] min-h-[38px] w-full items-center justify-between rounded-lg border border-border bg-[var(--input-bg)] px-3 py-2 text-sm text-foreground shadow-sm hover:border-primary/50 dark:hover:border-[#484848] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:focus:ring-ring dark:focus:ring-offset-1 dark:focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 transition-colors text-left",
               !activeVal && "text-muted-foreground",
               className
             )}

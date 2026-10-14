@@ -12,7 +12,9 @@ export function Labour(){
   const [statementWorker,setStatementWorker]=useState<Row<'labour_master'>|null>(null);
   const [borrowModalOpen,setBorrowModalOpen]=useState(false);
   const [borrowLabourId,setBorrowLabourId]=useState('');
-  const [prodRange,setProdRange]=useState<'All'|'Day'|'Week'|'Month'>('All');
+  const [prodRange,setProdRange]=useState<'All'|'Day'|'Week'|'Month'|'Custom'>('All');
+  const [prodCustomFrom,setProdCustomFrom]=useState('');
+  const [prodCustomTo,setProdCustomTo]=useState('');
   const [busy,setBusy]=useState(false);
 
   const [allocPage, setAllocPage] = useState(1);
@@ -34,6 +36,12 @@ export function Labour(){
     if (prodRange === 'Day') return date.toDateString() === now.toDateString();
     if (prodRange === 'Week') return (now.getTime() - date.getTime()) <= 7 * 86400000;
     if (prodRange === 'Month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    if (prodRange === 'Custom') {
+      const dStr = a.start_time.slice(0, 10);
+      if (prodCustomFrom && dStr < prodCustomFrom) return false;
+      if (prodCustomTo && dStr > prodCustomTo) return false;
+      return true;
+    }
     return true;
   });
 
@@ -111,18 +119,27 @@ export function Labour(){
       <MasterPage kind="workers" title="Labour Management"/>
       <section className="mt-8">
         <div className="section-header flex items-center justify-between flex-wrap gap-2">
-          <h2>Production Allocations & Productivity</h2>
-          <div className="flex items-center gap-1 bg-secondary/60 p-0.5 rounded-full text-xs">
-            {(['All', 'Day', 'Week', 'Month'] as const).map(r => (
-              <button
-                key={r}
-                type="button"
-                className={`px-3 py-1 rounded-full font-medium transition-colors ${prodRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                onClick={() => { setProdRange(r); setAllocPage(1); }}
-              >
-                {r === 'All' ? 'All Time' : `This ${r}`}
-              </button>
-            ))}
+          <h2>Production Allocations & Productivity Tracking</h2>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1 bg-secondary/60 p-0.5 rounded-full text-xs">
+              {(['All', 'Day', 'Week', 'Month', 'Custom'] as const).map(r => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`px-3 py-1 rounded-full font-medium transition-colors ${prodRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  onClick={() => { setProdRange(r); setAllocPage(1); }}
+                >
+                  {r === 'All' ? 'All Time' : r === 'Custom' ? 'Custom Range' : `This ${r}`}
+                </button>
+              ))}
+            </div>
+
+            {prodRange === 'Custom' && (
+              <div className="flex items-center gap-2">
+                <DateFilterPill label="From" value={prodCustomFrom} onChange={v=>{ setProdCustomFrom(v); setAllocPage(1); }} placeholder="From" />
+                <DateFilterPill label="To" value={prodCustomTo} onChange={v=>{ setProdCustomTo(v); setAllocPage(1); }} placeholder="To" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -152,35 +169,56 @@ export function Labour(){
             <thead>
               <tr>
                 <th>Worker</th>
-                <th>Box Type</th>
+                <th>Order / PO #</th>
+                <th>Box Type & Size</th>
                 <th className="numeric">Assigned</th>
-                <th className="numeric">Completed</th>
+                <th className="numeric">Produced</th>
                 <th className="numeric">Pending</th>
-                <th>Completion</th>
+                <th>Progress</th>
+                <th>Scheduled Start</th>
                 <th>Tentative Completion</th>
                 <th>Status</th>
                 <th className="text-right"/>
               </tr>
             </thead>
             <tbody>
-              {paginatedAllocations.length ? paginatedAllocations.map(a=>(
-                <tr key={a.id}>
-                  <td className="font-medium text-foreground">{d.workers.find(w=>w.id===a.labour_id)?.labour_name}</td>
-                  <td>{d.items.find(i=>i.id===a.order_item_id)?.box_type}</td>
-                  <td className="numeric font-medium">{number(a.allocated_qty)}</td>
-                  <td className="numeric text-muted-foreground">{number(a.completed_qty)}</td>
-                  <td className="numeric font-medium text-foreground">{number(a.allocated_qty-a.completed_qty)}</td>
-                  <td>{Math.round(a.completed_qty/a.allocated_qty*100)}%</td>
-                  <td>{new Date(a.tentative_completion).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</td>
-                  <td><Pill value={a.status}/></td>
-                  <td className="text-right">
-                    {a.completed_qty<a.allocated_qty&& (
-                      <Button size="sm" variant="outline" onClick={()=>setSelected(a)}>Record Completion</Button>
-                    )}
-                  </td>
-                </tr>
-              )) : (
-                <Empty columns={9} label="No production allocations"/>
+              {paginatedAllocations.length ? paginatedAllocations.map(a=>{
+                const item = d.items.find(i=>i.id===a.order_item_id);
+                const order = item ? d.orders.find(o=>o.id===item.order_id) : null;
+                const worker = d.workers.find(w=>w.id===a.labour_id);
+                const pending = Math.max(0, a.allocated_qty - a.completed_qty);
+                const progressPct = a.allocated_qty > 0 ? Math.round((a.completed_qty / a.allocated_qty) * 100) : 0;
+
+                return (
+                  <tr key={a.id}>
+                    <td className="font-medium text-foreground">{worker?.labour_name || 'Worker'}</td>
+                    <td className="text-xs text-muted-foreground font-medium">{order?.order_no || '—'}</td>
+                    <td>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium">{item?.box_type || '—'}</span>
+                        {item?.size_dimensions && <span className="text-xs text-muted-foreground">({item.size_dimensions})</span>}
+                      </div>
+                    </td>
+                    <td className="numeric font-medium">{number(a.allocated_qty)}</td>
+                    <td className="numeric text-emerald-500 font-medium">{number(a.completed_qty)}</td>
+                    <td className="numeric font-medium text-foreground">{number(pending)}</td>
+                    <td>{progressPct}%</td>
+                    <td className="text-xs text-muted-foreground">
+                      {new Date(a.start_time).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+                    </td>
+                    <td className="text-xs text-muted-foreground">
+                      {new Date(a.tentative_completion).toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
+                    </td>
+                    <td><Pill value={a.status}/></td>
+                    <td className="text-right">
+                      {a.completed_qty < a.allocated_qty && (
+                        <Button size="sm" variant="outline" onClick={()=>setSelected(a)}>Record Completion</Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              }) : (
+                <Empty columns={11} label="No production allocations found"/>
               )}
             </tbody>
           </table>
@@ -246,6 +284,9 @@ export function Labour(){
           pageSize={pageSize}
           onPageChange={setAllocPage}
         />
+
+        {/* Labour & Production Volume Charts */}
+        <VolumeCharts />
       </section>
 
       <section className="mt-8">

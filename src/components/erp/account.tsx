@@ -104,7 +104,7 @@ export function Settings(){
             </div>
             <div>
               <div className="settings-item-title">PWA Application</div>
-              <div className="settings-item-desc">Install CrateERP on your home screen or desktop for offline access</div>
+              <div className="settings-item-desc">Install SLBW on your home screen or desktop for offline access</div>
             </div>
           </div>
           <Button
@@ -238,7 +238,7 @@ export function Profile(){
             <p className="text-xs text-muted-foreground mt-1">Sign in or create an account to view and customize your factory profile.</p>
           </div>
           <Link to="/login" className="block w-full">
-            <Button className="w-full rounded-full shadow-none" style={{ boxShadow: 'none' }}>Sign in to CrateERP</Button>
+            <Button className="w-full rounded-full shadow-none" style={{ boxShadow: 'none' }}>Sign in to SLBW</Button>
           </Link>
         </div>
       </div>
@@ -366,7 +366,7 @@ export function Admin(){
     if(!allUsersMap.has(r.user_id)){
       allUsersMap.set(r.user_id,{
         id:r.user_id,
-        email:r.user_id===user?.id?user.email||'Current Admin':'member@crateerp.local',
+        email:r.user_id===user?.id?user.email||'Current Admin':'member@slbw.local',
         created_at:new Date().toISOString(),
         role:(r.role as import('./provider').AppRole) || 'pending',
         display_name:r.user_id===user?.id?'You (Admin)':'Team Member'
@@ -381,7 +381,7 @@ export function Admin(){
   if(user&&!allUsersMap.has(user.id)){
     allUsersMap.set(user.id,{
       id:user.id,
-      email:user.email||'admin@crateerp.local',
+      email:user.email||'admin@slbw.local',
       created_at:user.created_at,
       role:isAdmin?'admin':'viewer',
       display_name:user.user_metadata?.['display_name']||'You'

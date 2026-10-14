@@ -231,10 +231,10 @@ export function Production(){
           </tbody>
           <tfoot>
             <tr className="border-t border-border bg-muted/20 font-medium">
-              <td colSpan={4} className="text-right text-xs text-muted-foreground font-semibold px-3 py-2.5">
+              <td colSpan={4} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
                 Queue Totals ({number(filtered.length)} items):
               </td>
-              <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+              <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                 {number(totalOrdered)}
               </td>
               <td className="numeric text-muted-foreground px-3 py-2.5 tabular-nums">
@@ -243,7 +243,7 @@ export function Production(){
               <td className="numeric text-emerald-500 font-medium px-3 py-2.5 tabular-nums">
                 {number(filtered.reduce((s,i)=>s+i.completed_qty,0))}
               </td>
-              <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+              <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                 {number(totalUnallocated)}
               </td>
               <td colSpan={3} />
@@ -347,105 +347,167 @@ export function Production(){
           </div>
 
           <form onSubmit={submit}>
-            <div className="form-section-title">1. Allocation Target</div>
-            <div className="p-3 bg-secondary/50 border border-border rounded-lg mb-4 text-xs grid grid-cols-3 gap-3">
-              <div>
-                <span className="text-muted-foreground block">Box Type</span>
-                <strong className="text-foreground text-sm font-medium">{selected?.box_type}</strong>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Dimensions</span>
-                <strong className="text-foreground text-sm font-medium">{selected?.size_dimensions}</strong>
-              </div>
-              <div>
-                <span className="text-muted-foreground block">Available to Allocate</span>
-                <strong className="text-foreground text-sm font-medium">
-                  {selected ? number(selected.ordered_qty - selected.allocated_qty) : 0} boxes
-                </strong>
-              </div>
-            </div>
+            {(() => {
+              const pendingPoQty = selected ? selected.ordered_qty - selected.allocated_qty : 0;
+              const exceedsPending = qty > pendingPoQty;
+              const remainingAfterAssign = Math.max(0, pendingPoQty - qty);
+              const partyName = selectedOrder?.is_self_stock ? 'Self Stocking' : (d.parties.find(p => p.id === selectedOrder?.party_id)?.company_name ?? '—');
 
-            <div className="form-section-title">2. Worker Assignment & Schedule</div>
-            <div className="form-grid">
-              <label className="form-wide">
-                Worker / Unit Station
-                <ThemedSelect
-                  name="labour_id"
-                  placeholder="Select worker or production team"
-                  options={d.workers.map(w=>({
-                    value: w.id,
-                    label: `${w.labour_name}${w.unit_assignment ? ' · ' + w.unit_assignment : ''}`
-                  }))}
-                  required
-                />
-              </label>
+              return (
+                <>
+                  <div className="form-section-title">1. Order Entry Specifications & Pending Quantity</div>
+                  <div className="p-3.5 bg-secondary/50 border border-border rounded-xl mb-4 text-xs space-y-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pb-3 border-b border-border/60">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Party / Customer</span>
+                        <strong className="text-foreground text-sm font-medium">{partyName}</strong>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">PO / Order #</span>
+                        <strong className="text-foreground text-sm font-medium">{selectedOrder?.order_no || '—'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Priority</span>
+                        {selected && <Pill value={selected.priority_signal} />}
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Total PO Ordered</span>
+                        <strong className="text-foreground text-sm font-medium">{selected ? number(selected.ordered_qty) : 0} boxes</strong>
+                      </div>
+                    </div>
 
-              <label>
-                Quantity to Assign
-                <input
-                  type="number"
-                  min={1}
-                  max={selected ? selected.ordered_qty - selected.allocated_qty : 1}
-                  required
-                  value={qty}
-                  onChange={e=>setQty(Number(e.target.value))}
-                />
-              </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Box Type & Size</span>
+                        <span className="text-foreground font-medium">{selected?.box_type} · {selected?.size_dimensions}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Full Specifications</span>
+                        <span className="text-foreground font-medium">{selected?.specification || 'Standard specification'}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Code / Remarks</span>
+                        <span className="text-muted-foreground">{selected?.code_remarks || '—'}</span>
+                      </div>
+                    </div>
 
-              <label>
-                Labour Rate Per Box (₹)
-                <input
-                  type="number"
-                  min={0}
-                  step=".01"
-                  required
-                  value={rate}
-                  onChange={e=>setRate(Number(e.target.value))}
-                />
-              </label>
+                    <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/60 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Already Allocated</span>
+                        <span className="text-muted-foreground font-medium">{selected ? number(selected.allocated_qty) : 0} boxes</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Already Completed</span>
+                        <span className="text-emerald-500 font-medium">{selected ? number(selected.completed_qty) : 0} boxes</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Pending PO Quantity</span>
+                        <strong className="text-foreground font-semibold text-sm">{number(pendingPoQty)} boxes</strong>
+                      </div>
+                    </div>
+                  </div>
 
-              <label>
-                Scheduled Start Time
-                <input
-                  type="datetime-local"
-                  required
-                  value={start}
-                  onChange={e=>setStart(e.target.value)}
-                />
-              </label>
+                  <div className="form-section-title">2. Worker Assignment & Schedule</div>
+                  
+                  {exceedsPending && (
+                    <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs text-destructive space-y-1 mb-4">
+                      <strong className="font-semibold block">⚠️ Assigned quantity ({number(qty)}) exceeds actual pending PO quantity ({number(pendingPoQty)} boxes)</strong>
+                      <p>You cannot allocate more than the pending PO balance. If you need to produce more, please add or increase the quantity in the Order Entry PO first.</p>
+                    </div>
+                  )}
 
-              <label>
-                Estimated Duration
-                <ThemedSelect
-                  name="duration_hours"
-                  value={String(hours)}
-                  onChange={v=>setHours(Number(v))}
-                  options={Array.from({length:10},(_,i)=>({
-                    value: String(i+1),
-                    label: `${i+1} hour${i>0?'s':''}`
-                  }))}
-                />
-              </label>
-            </div>
+                  {!exceedsPending && qty > 0 && qty < pendingPoQty && (
+                    <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-600 dark:text-blue-400 flex items-center justify-between mb-4">
+                      <span>Remaining unassigned PO quantity after this allocation:</span>
+                      <strong className="font-semibold">{number(remainingAfterAssign)} boxes</strong>
+                    </div>
+                  )}
 
-            {/* Live Calculation Banner */}
-            <div className="form-calc-banner">
-              <div>
-                <span className="text-muted-foreground block text-xs">Estimated Completion</span>
-                <strong className="text-foreground font-medium text-xs">
-                  {new Date(new Date(start).getTime() + hours*3600000).toLocaleString()}
-                </strong>
-              </div>
-              <div className="text-right">
-                <span className="text-muted-foreground block text-xs">Estimated Labour Expense</span>
-                <strong className="text-foreground font-semibold text-base">{money(qty*rate)}</strong>
-              </div>
-            </div>
+                  <div className="form-grid">
+                    <label className="form-wide">
+                      Worker / Unit Station
+                      <ThemedSelect
+                        name="labour_id"
+                        placeholder="Select worker or production team"
+                        options={d.workers.map(w=>({
+                          value: w.id,
+                          label: `${w.labour_name}${w.unit_assignment ? ' · ' + w.unit_assignment : ''}`
+                        }))}
+                        required
+                      />
+                    </label>
 
-            <div className="form-actions">
-              <Button variant="outline" type="button" onClick={()=>setSelected(null)}>Cancel</Button>
-              <Button type="submit" disabled={busy}>{busy?'Assigning…':'Confirm Allocation'}</Button>
-            </div>
+                    <label>
+                      Quantity to Assign
+                      <input
+                        type="number"
+                        min={1}
+                        max={pendingPoQty}
+                        required
+                        value={qty}
+                        onChange={e=>setQty(Number(e.target.value))}
+                      />
+                    </label>
+
+                    <label>
+                      Labour Rate Per Box (₹)
+                      <input
+                        type="number"
+                        min={0}
+                        step=".01"
+                        required
+                        value={rate}
+                        onChange={e=>setRate(Number(e.target.value))}
+                      />
+                    </label>
+
+                    <label>
+                      Scheduled Start Time
+                      <input
+                        type="datetime-local"
+                        required
+                        value={start}
+                        onChange={e=>setStart(e.target.value)}
+                      />
+                    </label>
+
+                    <label>
+                      Estimated Duration (1 to 10 Hours)
+                      <ThemedSelect
+                        name="duration_hours"
+                        value={String(hours)}
+                        onChange={v=>setHours(Number(v))}
+                        options={Array.from({length:10},(_,i)=>({
+                          value: String(i+1),
+                          label: `${i+1} hour${i>0?'s':''}`
+                        }))}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Live Calculation Banner */}
+                  <div className="form-calc-banner">
+                    <div>
+                      <span className="text-muted-foreground block text-xs">Estimated Completion</span>
+                      <strong className="text-foreground font-medium text-xs">
+                        {new Date(new Date(start).getTime() + hours*3600000).toLocaleString()}
+                      </strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-muted-foreground block text-xs">Total Labour Price ({number(qty)} × ₹{rate})</span>
+                      <strong className="text-foreground font-semibold text-base">{money(qty*rate)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="form-actions">
+                    <Button variant="outline" type="button" onClick={()=>setSelected(null)}>Cancel</Button>
+                    <Button type="submit" disabled={busy || exceedsPending || qty <= 0}>
+                      {busy ? 'Assigning…' : 'Confirm Allocation'}
+                    </Button>
+                  </div>
+                </>
+              );
+            })()}
           </form>
         </DialogContent>
       </Dialog>

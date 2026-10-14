@@ -3,6 +3,6 @@ import { SignupPage } from '@/components/erp/auth';
 import { meta } from '@/lib/erp-data';
 
 export const Route = createFileRoute('/signup')({
-  head: () => meta('Create Account', 'Create your CrateERP factory workspace account.'),
+  head: () => meta('Create Account', 'Create your SLBW factory workspace account.'),
   component: SignupPage,
 });

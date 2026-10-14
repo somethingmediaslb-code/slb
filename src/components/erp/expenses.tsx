@@ -448,8 +448,11 @@ export function Expenses(){
                       name="challan"
                       placeholder="Shared expense"
                       options={[
-                        {value:'', label:'Shared expense'},
-                        ...d.challans.filter(c => c.status !== 'Cancelled').map(c=>({value:c.id, label:c.challan_number}))
+                        {value:'', label:'Shared / General Overhead'},
+                        ...d.challans.filter(c => c.status !== 'Cancelled').map(c=>({
+                          value: c.id,
+                          label: `${c.challan_number} · Freight: ₹${c.freight_charges || 0}`
+                        }))
                       ]}
                     />
                   </label>

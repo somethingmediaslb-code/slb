@@ -78,11 +78,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CrateERP" },
-      { name: "description", content: "Box and packaging factory operations" },
-      { name: "author", content: "CrateERP" },
-      { property: "og:title", content: "CrateERP" },
-      { property: "og:description", content: "Box and packaging factory operations" },
+      { title: "SLBW" },
+      { name: "description", content: "SLBW — Box & Packaging Enterprise Operations" },
+      { name: "author", content: "SLBW" },
+      { property: "og:title", content: "SLBW" },
+      { property: "og:description", content: "SLBW — Box & Packaging Enterprise Operations" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -91,10 +91,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: appCss,
       },
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap",
+      },
       { rel: "icon", href: "/icon-192.png", type: "image/png" },
       { rel: "manifest", href: "/manifest.json" },
       { rel: "apple-touch-icon", href: "/icon-192.png" },
-      { rel: "preload", href: "/neue-haas-roman.otf", as: "font", type: "font/otf", crossOrigin: "anonymous" },
     ],
   }),
   shellComponent: RootShell,
@@ -108,7 +113,11 @@ function RootShell({ children }: { children: ReactNode }) {
     <html lang="en">
       <head>
         <HeadContent />
-        <style>{`@font-face{font-family:"Neue Haas Roman";src:url("/neue-haas-roman.otf") format("opentype");font-weight:100 900;font-display:swap;}`}</style>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('slbw_theme')||'dark';document.documentElement.classList.remove('dark','light');document.documentElement.classList.add(t);document.documentElement.setAttribute('data-theme',t);document.documentElement.style.colorScheme=t;}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>
         {children}

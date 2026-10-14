@@ -1,15 +1,52 @@
-import {useEffect,useState} from 'react';
+import {useState, useEffect} from 'react';
 import {useSearch} from '@tanstack/react-router';
-import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid} from 'lucide-react';
+import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,MessageCircle,Share2} from 'lucide-react';
+import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
 import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline} from './common';
-import {money,number,dateLabel,today,downloadCsv} from '@/lib/erp-data';
+import {money,number,dateLabel,today,downloadCsv,type Row} from '@/lib/erp-data';
 
-const freshLine=()=>({sr_no:1,box_type:'',code_remarks:'',size_dimensions:'',specification:'',ordered_qty:1,unit_rate:0,priority_signal:'Yellow'});
+const freshLine=(sr:number=1)=>({sr_no:sr,box_type:'',code_remarks:'',size_dimensions:'',specification:'',ordered_qty:1,unit_rate:0,priority_signal:'Yellow'});
+
+export function sendOrderWhatsApp(order: Row<'orders'>, items: Row<'order_items'>[], party?: Row<'party_master'> | null) {
+  const companyName = order.is_self_stock ? 'Self Stocking' : (party?.company_name || 'Customer');
+  const phone = party?.phone_number ? party.phone_number.replace(/\D/g, '') : '';
+
+  const itemLines = items.map((item, idx) => {
+    const sr = item.sr_no || (idx + 1);
+    let l = `*Item #${sr}:* ${item.box_type || 'Box'}`;
+    if (item.size_dimensions) l += `\n• Size: ${item.size_dimensions}`;
+    if (item.specification) l += `\n• Spec: ${item.specification}`;
+    if (item.code_remarks) l += `\n• Code / Remarks: ${item.code_remarks}`;
+    l += `\n• Qty: ${number(item.ordered_qty)} units`;
+    // NOTE: Rates, prices, and amounts are strictly omitted for customer privacy
+    return l;
+  });
+
+  const text = [
+    `*ORDER CONFIRMATION - SLBW*`,
+    `--------------------------------`,
+    `*Company / Party:* ${companyName}`,
+    `*Order / PO No:* ${order.order_no}`,
+    `*Order Date:* ${dateLabel(order.order_date)}`,
+    `*Expected Delivery:* ${dateLabel(order.expected_date)}`,
+    `*Medium:* ${order.medium || 'Direct'}`,
+    order.remarks ? `*Remarks:* ${order.remarks}` : '',
+    '',
+    `*ORDER ITEM DETAILS (${items.length}):*`,
+    ...itemLines,
+    '',
+    `--------------------------------`,
+    `*SLBW Manufacturing*`
+  ].filter(Boolean).join('\n');
+
+  const url = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 export function Orders(){
   const {data:d,user,signIn,action,isAdmin}=useFactory();
@@ -91,16 +128,46 @@ export function Orders(){
 
   async function submit(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();
-    setBusy(true);
     const f=new FormData(e.currentTarget);
+    const partyVal=String(f.get('party_id')||'');
+    if(!stock && (!partyVal || partyVal==='null' || partyVal==='undefined' || partyVal.trim()==='')){
+      toast.error('Company selection is compulsory. Please select a party from Party Master.');
+      return;
+    }
+    if(!lines.length){
+      toast.error('At least one item is required in the order.');
+      return;
+    }
+    for(let i=0;i<lines.length;i++){
+      const l=lines[i];
+      if(!l.box_type.trim()){
+        toast.error(`Item #${i+1}: Please select or enter a box type.`);
+        return;
+      }
+      if(Number(l.ordered_qty)<=0){
+        toast.error(`Item #${i+1}: Quantity must be at least 1.`);
+        return;
+      }
+      if(!stock && Number(l.unit_rate)<0){
+        toast.error(`Item #${i+1}: Unit rate cannot be negative.`);
+        return;
+      }
+    }
+    setBusy(true);
     const success=await action('order',{
-      party_id:stock?null:String(f.get('party_id')),
+      party_id:stock?null:partyVal,
       is_self_stock:stock,
       order_date:String(f.get('order_date')),
       expected_date:String(f.get('expected_date')),
-      medium:String(f.get('medium')),
-      remarks:String(f.get('remarks')),
-      items:lines.map((l,i)=>({...l,sr_no:i+1}))
+      medium:String(f.get('medium')||'Other'),
+      remarks:String(f.get('remarks')||''),
+      items:lines.map((l,i)=>({
+        ...l,
+        sr_no:i+1,
+        ordered_qty:Number(l.ordered_qty),
+        unit_rate:Number(l.unit_rate)||0,
+        total_price:Number(l.ordered_qty)*(Number(l.unit_rate)||0)
+      }))
     });
     setBusy(false);
     if(success)setOpen(false);
@@ -337,15 +404,26 @@ export function Orders(){
                       </td>
                       <td><Pill value={o.status}/></td>
                       <td className="text-right" onClick={e=>e.stopPropagation()}>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label="View order options"
-                          title="View order options"
-                          onClick={()=>setViewOrderId(o.id)}
-                        >
-                          <MoreHorizontal className="w-4 h-4"/>
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="Send Order Details to WhatsApp"
+                            title="Send Order Details to WhatsApp"
+                            onClick={()=>sendOrderWhatsApp(o,items,d.parties.find(p=>p.id===o.party_id))}
+                          >
+                            <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400"/>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            aria-label="View order options"
+                            title="View order options"
+                            onClick={()=>setViewOrderId(o.id)}
+                          >
+                            <MoreHorizontal className="w-4 h-4"/>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -355,13 +433,13 @@ export function Orders(){
               </tbody>
               <tfoot>
                 <tr className="border-t border-border bg-muted/20 font-medium">
-                  <td colSpan={6} className="text-right text-xs text-muted-foreground font-semibold px-3 py-2.5">
+                  <td colSpan={6} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
                     Totals ({number(filtered.length)} orders):
                   </td>
-                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {number(totalVolume)}
                   </td>
-                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {money(totalValue)}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">
@@ -531,7 +609,7 @@ export function Orders(){
                   <div className="drawer-section-label">Order Fulfilment Health</div>
                   <div className="p-4 bg-background border border-border rounded-lg space-y-4">
                     <div className="flex items-baseline gap-3 pb-2 border-b border-border/60">
-                      <div className="text-3xl font-semibold text-foreground tabular-nums">
+                      <div className="text-3xl font-normal text-foreground tabular-nums tracking-tight">
                         {activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -650,6 +728,15 @@ export function Orders(){
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                    onClick={() => sendOrderWhatsApp(activeOrder, activeItems, activeParty)}
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 mr-1" />
+                    Share WhatsApp
+                  </Button>
                   <Button variant="secondary" size="sm" onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}>
                     Export CSV
                   </Button>
@@ -820,7 +907,7 @@ export function Orders(){
             </div>
 
             <div className="mt-3">
-              <Button type="button" variant="outline" size="sm" onClick={()=>setLines([...lines,freshLine()])}>
+              <Button type="button" variant="outline" size="sm" onClick={()=>setLines([...lines,freshLine(lines.length+1)])}>
                 <Plus className="w-4 h-4 mr-1"/> Add Another Item
               </Button>
             </div>

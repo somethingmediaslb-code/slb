@@ -74,19 +74,19 @@ export function LoginPage() {
 
   if (user) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#111111] text-[#ededed]">
-        <div className="w-full max-w-[390px] p-8 rounded-3xl border border-[#232323] bg-[#171717] text-center space-y-5" style={{ boxShadow: 'none' }}>
-          <div className="w-10 h-10 rounded-full bg-[#232323] text-[#f1f1f1] mx-auto flex items-center justify-center font-semibold text-sm" style={{ boxShadow: 'none' }}>
-            <CheckCircle2 className="w-5 h-5 text-[#ededed]" />
+      <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
+        <div className="w-full max-w-[390px] p-8 rounded-3xl border border-border bg-card text-center space-y-5" style={{ boxShadow: 'none' }}>
+          <div className="w-10 h-10 rounded-full bg-secondary text-foreground mx-auto flex items-center justify-center font-semibold text-sm" style={{ boxShadow: 'none' }}>
+            <CheckCircle2 className="w-5 h-5 text-foreground" />
           </div>
-          <p className="text-sm text-[#999999]">
-            Signed in as <span className="text-[#f1f1f1] font-medium">{user.email}</span>
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="text-foreground font-medium">{user.email}</span>
           </p>
           <div className="flex flex-col gap-2 pt-2">
             <button
               type="button"
               onClick={() => navigate({ to: '/' })}
-              className="w-full h-11 px-5 rounded-full bg-[#f1f1f1] hover:bg-white text-[#111111] text-sm font-medium transition-colors cursor-pointer"
+              className="w-full h-11 px-5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium transition-colors cursor-pointer"
               style={{ boxShadow: 'none' }}
             >
               Continue to Workspace
@@ -94,7 +94,7 @@ export function LoginPage() {
             <button
               type="button"
               onClick={() => supabase.auth.signOut()}
-              className="w-full h-11 px-5 rounded-full border border-[#2a2a2a] bg-transparent hover:bg-[#202020] text-[#999999] hover:text-[#f1f1f1] text-xs font-medium transition-colors cursor-pointer"
+              className="w-full h-11 px-5 rounded-full border border-border bg-transparent hover:bg-secondary text-muted-foreground hover:text-foreground text-xs font-medium transition-colors cursor-pointer"
               style={{ boxShadow: 'none' }}
             >
               Sign out
@@ -106,26 +106,20 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#111111] text-[#ededed]">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
       <div
-        className="w-full max-w-[390px] p-7 sm:p-8 rounded-3xl border border-[#232323] bg-[#171717] flex flex-col gap-5"
+        className="w-full max-w-[390px] p-7 sm:p-8 rounded-3xl border border-border bg-card flex flex-col gap-5 text-card-foreground shadow-sm"
         style={{ boxShadow: 'none' }}
       >
         {/* Brand emblem pill */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center font-bold text-xs"
-              style={{ boxShadow: 'none' }}
-            >
-              C
-            </div>
-            <span className="text-sm font-medium text-[#f1f1f1] tracking-tight">CrateERP</span>
+            <span className="text-base font-semibold text-foreground tracking-tight">SLBW</span>
           </div>
 
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#888888] hover:text-[#f1f1f1] hover:bg-[#202020] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             style={{ boxShadow: 'none' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -135,18 +129,18 @@ export function LoginPage() {
 
         {/* Tab switcher pill */}
         <div
-          className="p-1 rounded-full border border-[#232323] bg-[#141414] grid grid-cols-2 gap-1"
+          className="p-1 rounded-full border border-border bg-secondary grid grid-cols-2 gap-1"
           style={{ boxShadow: 'none' }}
         >
           <span
-            className="flex items-center justify-center py-1.5 px-3 rounded-full bg-[#262626] text-[#f1f1f1] text-xs font-medium cursor-default"
+            className="flex items-center justify-center py-1.5 px-3 rounded-full bg-card text-foreground text-xs font-medium cursor-default shadow-sm"
             style={{ boxShadow: 'none' }}
           >
             Sign in
           </span>
           <Link
             to="/signup"
-            className="flex items-center justify-center py-1.5 px-3 rounded-full text-[#777777] hover:text-[#f1f1f1] text-xs font-medium transition-colors"
+            className="flex items-center justify-center py-1.5 px-3 rounded-full text-muted-foreground hover:text-foreground text-xs font-medium transition-colors"
             style={{ boxShadow: 'none' }}
           >
             Create account
@@ -158,7 +152,7 @@ export function LoginPage() {
           type="button"
           onClick={handleGoogleSignIn}
           disabled={busy}
-          className="w-full flex items-center justify-center gap-2.5 h-11 px-5 rounded-full border border-[#282828] bg-[#1e1e1e] hover:bg-[#252525] text-[#ededed] text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2.5 h-11 px-5 rounded-full border border-border bg-secondary hover:bg-muted text-foreground text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
           style={{ boxShadow: 'none' }}
         >
           <GoogleIcon />
@@ -167,8 +161,8 @@ export function LoginPage() {
 
         {/* Minimalist Divider */}
         <div className="relative flex items-center justify-center py-0.5">
-          <div className="w-full border-t border-[#232323]" />
-          <span className="absolute bg-[#171717] px-3 text-[11px] font-medium text-[#666666] uppercase tracking-wider">
+          <div className="w-full border-t border-border" />
+          <span className="absolute bg-card px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
             or
           </span>
         </div>
@@ -176,7 +170,7 @@ export function LoginPage() {
         {/* Feedback message */}
         {error && (
           <div
-            className="p-3 rounded-2xl border border-red-500/20 bg-red-950/20 text-red-400 text-xs flex items-center gap-2"
+            className="p-3 rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive text-xs flex items-center gap-2"
             style={{ boxShadow: 'none' }}
           >
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
@@ -193,7 +187,7 @@ export function LoginPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your email to sign in"
-            className="w-full h-11 px-5 rounded-full border border-[#282828] bg-[#141414] text-sm text-[#f1f1f1] placeholder:text-[#666666] focus:border-[#484848] focus:outline-none transition-colors"
+            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
             style={{ boxShadow: 'none' }}
           />
 
@@ -204,14 +198,14 @@ export function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter your password"
-            className="w-full h-11 px-5 rounded-full border border-[#282828] bg-[#141414] text-sm text-[#f1f1f1] placeholder:text-[#666666] focus:border-[#484848] focus:outline-none transition-colors"
+            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
             style={{ boxShadow: 'none' }}
           />
 
           <button
             type="submit"
             disabled={busy}
-            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full bg-[#f1f1f1] hover:bg-white text-[#111111] text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 mt-1"
+            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 mt-1"
             style={{ boxShadow: 'none' }}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -223,7 +217,7 @@ export function LoginPage() {
         <div className="text-center pt-1">
           <Link
             to="/signup"
-            className="inline-block px-4 py-2 rounded-full text-xs text-[#888888] hover:text-[#f1f1f1] hover:bg-[#1f1f1f] transition-colors"
+            className="inline-block px-4 py-2 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             style={{ boxShadow: 'none' }}
           >
             Don&apos;t have an account? Sign up
@@ -298,19 +292,19 @@ export function SignupPage() {
 
   if (user) {
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#111111] text-[#ededed]">
-        <div className="w-full max-w-[390px] p-8 rounded-3xl border border-[#232323] bg-[#171717] text-center space-y-5" style={{ boxShadow: 'none' }}>
-          <div className="w-10 h-10 rounded-full bg-[#232323] text-[#f1f1f1] mx-auto flex items-center justify-center font-semibold text-sm" style={{ boxShadow: 'none' }}>
-            <CheckCircle2 className="w-5 h-5 text-[#ededed]" />
+      <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
+        <div className="w-full max-w-[390px] p-8 rounded-3xl border border-border bg-card text-center space-y-5" style={{ boxShadow: 'none' }}>
+          <div className="w-10 h-10 rounded-full bg-secondary text-foreground mx-auto flex items-center justify-center font-semibold text-sm" style={{ boxShadow: 'none' }}>
+            <CheckCircle2 className="w-5 h-5 text-foreground" />
           </div>
-          <p className="text-sm text-[#999999]">
-            Signed in as <span className="text-[#f1f1f1] font-medium">{user.email}</span>
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="text-foreground font-medium">{user.email}</span>
           </p>
           <div className="flex flex-col gap-2 pt-2">
             <button
               type="button"
               onClick={() => navigate({ to: '/' })}
-              className="w-full h-11 px-5 rounded-full bg-[#f1f1f1] hover:bg-white text-[#111111] text-sm font-medium transition-colors cursor-pointer"
+              className="w-full h-11 px-5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium transition-colors cursor-pointer"
               style={{ boxShadow: 'none' }}
             >
               Continue to Workspace
@@ -318,7 +312,7 @@ export function SignupPage() {
             <button
               type="button"
               onClick={() => supabase.auth.signOut()}
-              className="w-full h-11 px-5 rounded-full border border-[#2a2a2a] bg-transparent hover:bg-[#202020] text-[#999999] hover:text-[#f1f1f1] text-xs font-medium transition-colors cursor-pointer"
+              className="w-full h-11 px-5 rounded-full border border-border bg-transparent hover:bg-secondary text-muted-foreground hover:text-foreground text-xs font-medium transition-colors cursor-pointer"
               style={{ boxShadow: 'none' }}
             >
               Sign out
@@ -330,26 +324,20 @@ export function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#111111] text-[#ededed]">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
       <div
-        className="w-full max-w-[390px] p-7 sm:p-8 rounded-3xl border border-[#232323] bg-[#171717] flex flex-col gap-5"
+        className="w-full max-w-[390px] p-7 sm:p-8 rounded-3xl border border-border bg-card flex flex-col gap-5 text-card-foreground shadow-sm"
         style={{ boxShadow: 'none' }}
       >
         {/* Brand emblem pill */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div
-              className="w-7 h-7 rounded-full bg-white text-black flex items-center justify-center font-bold text-xs"
-              style={{ boxShadow: 'none' }}
-            >
-              C
-            </div>
-            <span className="text-sm font-medium text-[#f1f1f1] tracking-tight">CrateERP</span>
+            <span className="text-base font-semibold text-foreground tracking-tight">SLBW</span>
           </div>
 
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#888888] hover:text-[#f1f1f1] hover:bg-[#202020] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             style={{ boxShadow: 'none' }}
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -359,18 +347,18 @@ export function SignupPage() {
 
         {/* Tab switcher pill */}
         <div
-          className="p-1 rounded-full border border-[#232323] bg-[#141414] grid grid-cols-2 gap-1"
+          className="p-1 rounded-full border border-border bg-secondary grid grid-cols-2 gap-1"
           style={{ boxShadow: 'none' }}
         >
           <Link
             to="/login"
-            className="flex items-center justify-center py-1.5 px-3 rounded-full text-[#777777] hover:text-[#f1f1f1] text-xs font-medium transition-colors"
+            className="flex items-center justify-center py-1.5 px-3 rounded-full text-muted-foreground hover:text-foreground text-xs font-medium transition-colors"
             style={{ boxShadow: 'none' }}
           >
             Sign in
           </Link>
           <span
-            className="flex items-center justify-center py-1.5 px-3 rounded-full bg-[#262626] text-[#f1f1f1] text-xs font-medium cursor-default"
+            className="flex items-center justify-center py-1.5 px-3 rounded-full bg-card text-foreground text-xs font-medium cursor-default shadow-sm"
             style={{ boxShadow: 'none' }}
           >
             Create account
@@ -382,7 +370,7 @@ export function SignupPage() {
           type="button"
           onClick={handleGoogleSignUp}
           disabled={busy}
-          className="w-full flex items-center justify-center gap-2.5 h-11 px-5 rounded-full border border-[#282828] bg-[#1e1e1e] hover:bg-[#252525] text-[#ededed] text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2.5 h-11 px-5 rounded-full border border-border bg-secondary hover:bg-muted text-foreground text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
           style={{ boxShadow: 'none' }}
         >
           <GoogleIcon />
@@ -391,8 +379,8 @@ export function SignupPage() {
 
         {/* Minimalist Divider */}
         <div className="relative flex items-center justify-center py-0.5">
-          <div className="w-full border-t border-[#232323]" />
-          <span className="absolute bg-[#171717] px-3 text-[11px] font-medium text-[#666666] uppercase tracking-wider">
+          <div className="w-full border-t border-border" />
+          <span className="absolute bg-card px-3 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
             or
           </span>
         </div>
@@ -400,7 +388,7 @@ export function SignupPage() {
         {/* Feedback messages */}
         {error && (
           <div
-            className="p-3 rounded-2xl border border-red-500/20 bg-red-950/20 text-red-400 text-xs flex items-center gap-2"
+            className="p-3 rounded-2xl border border-destructive/20 bg-destructive/10 text-destructive text-xs flex items-center gap-2"
             style={{ boxShadow: 'none' }}
           >
             <AlertCircle className="w-3.5 h-3.5 shrink-0" />
@@ -410,7 +398,7 @@ export function SignupPage() {
 
         {successNotice && (
           <div
-            className="p-3 rounded-2xl border border-blue-500/20 bg-blue-950/20 text-blue-300 text-xs flex items-center gap-2"
+            className="p-3 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 text-xs flex items-center gap-2"
             style={{ boxShadow: 'none' }}
           >
             <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
@@ -427,7 +415,7 @@ export function SignupPage() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="Enter your work email to create an account"
-            className="w-full h-11 px-5 rounded-full border border-[#282828] bg-[#141414] text-sm text-[#f1f1f1] placeholder:text-[#666666] focus:border-[#484848] focus:outline-none transition-colors"
+            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
             style={{ boxShadow: 'none' }}
           />
 
@@ -438,7 +426,7 @@ export function SignupPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Choose password (min 8 characters)"
-            className="w-full h-11 px-5 rounded-full border border-[#282828] bg-[#141414] text-sm text-[#f1f1f1] placeholder:text-[#666666] focus:border-[#484848] focus:outline-none transition-colors"
+            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
             style={{ boxShadow: 'none' }}
           />
 
@@ -449,14 +437,14 @@ export function SignupPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="Confirm your password"
-            className="w-full h-11 px-5 rounded-full border border-[#282828] bg-[#141414] text-sm text-[#f1f1f1] placeholder:text-[#666666] focus:border-[#484848] focus:outline-none transition-colors"
+            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
             style={{ boxShadow: 'none' }}
           />
 
           <button
             type="submit"
             disabled={busy}
-            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full bg-[#f1f1f1] hover:bg-white text-[#111111] text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 mt-1"
+            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 mt-1"
             style={{ boxShadow: 'none' }}
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
@@ -468,7 +456,7 @@ export function SignupPage() {
         <div className="text-center pt-1">
           <Link
             to="/login"
-            className="inline-block px-4 py-2 rounded-full text-xs text-[#888888] hover:text-[#f1f1f1] hover:bg-[#1f1f1f] transition-colors"
+            className="inline-block px-4 py-2 rounded-full text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
             style={{ boxShadow: 'none' }}
           >
             Already have an account? Sign in

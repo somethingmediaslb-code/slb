@@ -94,7 +94,7 @@ export const runFactoryAction=createServerFn({method:'POST'}).middleware([requir
     const url=new URL(s.endpoint);
     if(url.protocol!=='https:'||!['fcm.googleapis.com','updates.push.services.mozilla.com','web.push.apple.com'].some(host=>url.hostname===host||url.hostname.endsWith('.'+host)))continue;
     for(const n of notifications){
-      const payload=await buildPushPayload({data:JSON.stringify({title:n.title,body:n.body,url:n.path,tag:n.id}),options:{ttl:3600}},{endpoint:s.endpoint,expirationTime:null,keys:{p256dh:s.p256dh,auth:s.auth}},{subject:process.env['APP_URL']||'mailto:admin@crateerp.local',publicKey:config.public_key,privateKey:config.private_key});
+      const payload=await buildPushPayload({data:JSON.stringify({title:n.title,body:n.body,url:n.path,tag:n.id}),options:{ttl:3600}},{endpoint:s.endpoint,expirationTime:null,keys:{p256dh:s.p256dh,auth:s.auth}},{subject:process.env['APP_URL']||'mailto:admin@slbw.local',publicKey:config.public_key,privateKey:config.private_key});
       const response=await fetch(s.endpoint,payload);
       if(response.status===404||response.status===410)await supabaseAdmin.from('push_subscriptions').delete().eq('id',s.id);
       else if(!response.ok)console.error('Push delivery failed',response.status);

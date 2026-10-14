@@ -229,7 +229,7 @@ export function Dashboard(){
                           </div>
                           <div className="flex items-center justify-between gap-3 py-0.5">
                             <span className="flex items-center gap-1.5 text-muted-foreground">
-                              <span className="w-2 h-2 rounded-full bg-input inline-block" />
+                              <span className="w-2 h-2 rounded-full bg-muted-foreground/60 inline-block" />
                               Dispatched
                             </span>
                             <strong className="text-foreground tabular-nums">{dispatched}</strong>
@@ -239,7 +239,7 @@ export function Dashboard(){
                     }}
                   />
                   <Bar dataKey="ordered" fill="var(--primary)" radius={[3,3,0,0]} maxBarSize={28}/>
-                  <Bar dataKey="dispatched" fill="var(--input)" radius={[3,3,0,0]} maxBarSize={28}/>
+                  <Bar dataKey="dispatched" fill="var(--muted-foreground)" opacity={0.65} radius={[3,3,0,0]} maxBarSize={28}/>
                 </BarChart>
               </ResponsiveContainer>
             ) : (

@@ -139,7 +139,7 @@ async function handleTentativeCompletionsCron(request: Request, env: any): Promi
               },
               { endpoint: s.endpoint, expirationTime: null, keys: { p256dh: s.p256dh, auth: s.auth } },
               {
-                subject: process.env["APP_URL"] || "mailto:admin@crateerp.local",
+                subject: process.env["APP_URL"] || "mailto:admin@slbw.local",
                 publicKey: config.public_key,
                 privateKey: config.private_key,
               },

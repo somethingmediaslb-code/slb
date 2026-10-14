@@ -509,7 +509,7 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
                     <div className="drawer-section-label">Order Fulfilment Health</div>
                     <div className="p-4 bg-background border border-border rounded-lg space-y-4">
                       <div className="flex items-baseline gap-3 pb-2 border-b border-border/60">
-                        <div className="text-3xl font-semibold text-foreground tabular-nums">
+                        <div className="text-3xl font-normal text-foreground tabular-nums tracking-tight">
                           {partyOrders.length > 0 ? Math.round((partyCompletedCount / partyOrders.length) * 100) : 100}%
                         </div>
                         <div className="text-xs text-muted-foreground">

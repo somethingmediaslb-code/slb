@@ -80,23 +80,39 @@ export function Dispatch(){
   function whatsapp(c:Row<'delivery_challans'>){
     const order=d.orders.find(o=>o.id===c.order_id);
     const party=d.parties.find(p=>p.id===order?.party_id);
+    const companyName=company(c.order_id);
     const lines=d.challanItems.filter(i=>i.challan_id===c.id).map((i,idx)=>{
       const item=d.items.find(x=>x.id===i.order_item_id);
-      return `Item #${item?.sr_no ?? (idx+1)}: ${item?.box_type || 'Box'} | Size: ${item?.size_dimensions || 'Standard'} | Dispatched Qty: ${i.dispatched_qty} units`;
+      let details=`*Item #${item?.sr_no ?? (idx+1)}:* ${item?.box_type || 'Box'}`;
+      if(item?.code_remarks) details+=`\n• Code / Remarks: ${item.code_remarks}`;
+      if(item?.size_dimensions) details+=`\n• Size: ${item.size_dimensions}`;
+      if(item?.specification) details+=`\n• Specification: ${item.specification}`;
+      details+=`\n• Dispatched Qty: ${number(i.dispatched_qty)} units`;
+      // STRICT PRIVACY RULE: NO rates, unit prices, or total amounts
+      return details;
     });
+
     const text=[
-      `*Delivery Challan Notice*`,
-      `Company: ${company(c.order_id)}`,
-      `PO Number: ${order?.order_no || '—'}`,
-      `Challan: ${c.challan_number}`,
-      `Vehicle: ${c.vehicle_number || '—'} | LR: ${c.lr_number || '—'}`,
-      `Dispatch Date: ${dateLabel(c.dispatch_date)}`,
+      `*DELIVERY CHALLAN & DISPATCH NOTICE - SLBW*`,
+      `--------------------------------`,
+      `*Company / Party:* ${companyName}`,
+      `*Order / PO No:* ${order?.order_no || '—'}`,
+      `*Delivery Challan No:* ${c.challan_number}`,
+      `*Dispatch Date:* ${dateLabel(c.dispatch_date)}`,
+      c.transport_carrier ? `*Carrier:* ${c.transport_carrier}` : '',
+      c.vehicle_number ? `*Vehicle:* ${c.vehicle_number}` : '',
+      c.lr_number ? `*LR / Tracking:* ${c.lr_number}` : '',
       '',
-      `*Items Dispatched:*`,
-      ...lines
-    ].join('\n');
+      `*DISPATCHED ITEMS:*`,
+      ...lines,
+      '',
+      `--------------------------------`,
+      `*SLBW Logistics & Dispatch*`
+    ].filter(Boolean).join('\n');
+
     const phone=party?.phone_number?.replace(/\D/g,'')??'';
-    window.open('https://wa.me/'+phone+'?text='+encodeURIComponent(text),'_blank','noopener,noreferrer');
+    const url=phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url,'_blank','noopener,noreferrer');
   }
 
   return (
@@ -226,7 +242,7 @@ export function Dispatch(){
                   <td className="numeric text-muted-foreground px-3 py-2.5 tabular-nums">
                     {number(filteredReady.reduce((s,i)=>s+i.dispatched_qty,0))}
                   </td>
-                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {number(totalReadyQty)}
                   </td>
                   <td colSpan={2} />
@@ -402,13 +418,13 @@ export function Dispatch(){
               </tbody>
               <tfoot>
                 <tr className="border-t border-border bg-muted/20 font-medium">
-                  <td colSpan={7} className="text-right text-xs text-muted-foreground font-semibold px-3 py-2.5">
+                  <td colSpan={7} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
                     History Totals ({number(filteredHistory.length)} challans):
                   </td>
-                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {money(filteredHistory.reduce((s,c)=>s+(c.freight_charges??0),0))}
                   </td>
-                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
+                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {number(totalDispatchedQty)}
                   </td>
                   <td colSpan={2} />

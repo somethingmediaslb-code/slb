@@ -22,7 +22,10 @@ import {
   Mail,
   UserRound,
   AlertTriangle,
-  Check
+  Check,
+  Sun,
+  Moon,
+  BarChart3,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
@@ -193,6 +196,7 @@ export const mastersNav = [
 
 export const financeNav = [
   { to: '/expenses', label: 'Expenses & Borrowings', icon: Wallet, key: 'expenses' },
+  { to: '/reports', label: 'Reports & Realised Profit', icon: BarChart3, key: 'reports' },
   { to: '/admin', label: 'Admin Panel', icon: ShieldCheck, key: 'admin' },
   { to: '/profile', label: 'Account Profile', icon: UserRound, key: 'profile' },
   { to: '/settings', label: 'Settings', icon: Settings, key: 'settings' }
@@ -210,6 +214,29 @@ export function AppShell({children}:{children:ReactNode}){
   const [alerts,setAlerts]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
   const {user,data,signIn,isPendingVerification,userRole,isAdmin}=useFactory();
+
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('slbw_theme');
+      if (stored === 'light' || stored === 'dark') return stored;
+      return document.documentElement.classList.contains('light') ? 'light' : 'dark';
+    }
+    return 'dark';
+  });
+
+  const toggleTheme = (newTheme: 'dark' | 'light') => {
+    setTheme(newTheme);
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.classList.remove('dark', 'light');
+      root.classList.add(newTheme);
+      root.setAttribute('data-theme', newTheme);
+      root.style.colorScheme = newTheme;
+      try {
+        localStorage.setItem('slbw_theme', newTheme);
+      } catch {}
+    }
+  };
 
   // If user is authenticated but not yet handed over an active role by admin
   if (user && isPendingVerification) {
@@ -231,7 +258,7 @@ export function AppShell({children}:{children:ReactNode}){
 
   const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('crateerp_read_notifs') || '["op-notif-4", "op-notif-5"]');
+      return JSON.parse(localStorage.getItem('slbw_read_notifs') || '["op-notif-4", "op-notif-5"]');
     } catch {
       return ['op-notif-4', 'op-notif-5'];
     }
@@ -280,7 +307,7 @@ export function AppShell({children}:{children:ReactNode}){
     const allIds = allNotifications.map(n => n.id);
     setReadNotifIds(allIds);
     try {
-      localStorage.setItem('crateerp_read_notifs', JSON.stringify(allIds));
+      localStorage.setItem('slbw_read_notifs', JSON.stringify(allIds));
     } catch {}
   };
 
@@ -289,7 +316,7 @@ export function AppShell({children}:{children:ReactNode}){
       const updated = [...readNotifIds, item.id];
       setReadNotifIds(updated);
       try {
-        localStorage.setItem('crateerp_read_notifs', JSON.stringify(updated));
+        localStorage.setItem('slbw_read_notifs', JSON.stringify(updated));
       } catch {}
     }
     setAlerts(false);
@@ -323,7 +350,7 @@ export function AppShell({children}:{children:ReactNode}){
   const currentTitle = current?.label ?? 'Dashboard';
 
   if (typeof document !== 'undefined') {
-    document.title = currentTitle ? `${currentTitle} | CrateERP` : 'CrateERP';
+    document.title = currentTitle ? `${currentTitle} | SLBW` : 'SLBW';
   }
 
   return (
@@ -332,13 +359,10 @@ export function AppShell({children}:{children:ReactNode}){
       
       <aside className={'sidebar '+(open?'open':'')}>
         <div className="sidebar-inner">
-          {/* Brand Header */}
+          {/* Brand Header - Clean typography without company logo */}
           <Link className="brand-header" to="/" onClick={()=>setOpen(false)}>
-            <div className="brand-icon">
-              <Box size={18} />
-            </div>
             <div className="brand-text">
-              <span className="brand-title">CrateERP</span>
+              <span className="brand-title">SLBW</span>
               <span className="brand-sub">Wooden box manufacturing</span>
             </div>
           </Link>
@@ -481,9 +505,9 @@ export function AppShell({children}:{children:ReactNode}){
                 </Button>
               </div>
             ) : (
-              <div className="p-2 border-t border-[#232323] bg-[#171717]">
+              <div className="p-2 border-t border-sidebar-border bg-sidebar">
                 <Link to="/login" className="block w-full">
-                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 h-7 text-xs border-[#2c2c2e] hover:bg-[#222]">
+                  <Button variant="outline" size="sm" className="w-full justify-start gap-2 h-7 text-xs border-border hover:bg-secondary">
                     <UserRound size={13} /> Sign in
                   </Button>
                 </Link>
@@ -515,6 +539,32 @@ export function AppShell({children}:{children:ReactNode}){
             <Link to="/orders" className="topbar-icon-btn" title="Search records">
               <Search size={14} />
             </Link>
+
+            {/* Theme options: Dark - Light switcher just beside search icon */}
+            <div className="theme-switcher-pill" role="radiogroup" aria-label="Theme options">
+              <button
+                type="button"
+                className={`theme-switcher-opt ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => toggleTheme('dark')}
+                role="radio"
+                aria-checked={theme === 'dark'}
+                title="Dark theme"
+              >
+                <Moon size={12} />
+                <span>Dark</span>
+              </button>
+              <button
+                type="button"
+                className={`theme-switcher-opt ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => toggleTheme('light')}
+                role="radio"
+                aria-checked={theme === 'light'}
+                title="Light theme"
+              >
+                <Sun size={12} />
+                <span>Light</span>
+              </button>
+            </div>
 
             <Popover open={alerts} onOpenChange={setAlerts}>
               <PopoverTrigger asChild>

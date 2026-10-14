@@ -30,25 +30,23 @@ export function PendingVerificationPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#111111] text-[#ededed]">
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
       <div
-        className="w-full max-w-[420px] p-8 sm:p-9 rounded-3xl border border-[#232323] bg-[#171717] flex flex-col items-center text-center gap-6"
-        style={{ boxShadow: 'none' }}
+        className="w-full max-w-[420px] p-8 sm:p-9 rounded-3xl border border-border bg-card flex flex-col items-center text-center gap-6 shadow-sm"
       >
         {/* Mid-size Icon */}
         <div
-          className="w-16 h-16 rounded-full border border-[#262626] bg-[#1a1a1a] flex items-center justify-center text-[#ededed] shrink-0"
-          style={{ boxShadow: 'none' }}
+          className="w-16 h-16 rounded-full border border-border bg-secondary flex items-center justify-center text-foreground shrink-0"
         >
-          <Clock className="w-8 h-8 text-[#d6d6d6]" strokeWidth={1.5} />
+          <Clock className="w-8 h-8 text-muted-foreground" strokeWidth={1.5} />
         </div>
 
         {/* Minimalist Text */}
         <div className="flex flex-col gap-2">
-          <h1 className="text-xl font-medium tracking-tight text-[#f1f1f1]">
+          <h1 className="text-xl font-medium tracking-tight text-foreground">
             Pending Verification
           </h1>
-          <p className="text-xs text-[#8e8e8e] leading-relaxed max-w-[320px] mx-auto">
+          <p className="text-xs text-muted-foreground leading-relaxed max-w-[320px] mx-auto">
             Your account is awaiting role assignment from the factory administrator.
             You will gain access once an admin hands over your workspace role.
           </p>
@@ -56,27 +54,26 @@ export function PendingVerificationPage() {
 
         {/* User Account Info Pill */}
         <div
-          className="w-full p-4 rounded-2xl border border-[#242424] bg-[#131313] flex flex-col gap-2.5 text-left text-xs"
-          style={{ boxShadow: 'none' }}
+          className="w-full p-4 rounded-2xl border border-border bg-secondary/50 flex flex-col gap-2.5 text-left text-xs"
         >
           <div className="flex items-center justify-between">
-            <span className="text-[#777777]">Account</span>
-            <span className="text-[#e2e2e2] font-medium truncate max-w-[200px]">
+            <span className="text-muted-foreground">Account</span>
+            <span className="text-foreground font-medium truncate max-w-[200px]">
               {user?.email || 'Authenticated User'}
             </span>
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-[#777777]">Status</span>
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#242424] text-[#cfcfcf]">
+            <span className="text-muted-foreground">Status</span>
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-muted text-foreground">
               Awaiting Role Handover
             </span>
           </div>
 
-          <div className="flex items-center justify-between pt-1 border-t border-[#222222]">
-            <span className="text-[#777777]">User ID</span>
+          <div className="flex items-center justify-between pt-1 border-t border-border">
+            <span className="text-muted-foreground">User ID</span>
             <div className="flex items-center gap-1.5">
-              <span className="font-mono text-[11px] text-[#999999]">
+              <span className="font-mono text-[11px] text-muted-foreground">
                 {user?.id ? `${user.id.slice(0, 8)}…${user.id.slice(-4)}` : '—'}
               </span>
               <button
@@ -84,9 +81,9 @@ export function PendingVerificationPage() {
                 onClick={handleCopyId}
                 aria-label="Copy User ID"
                 title="Copy User ID to share with admin"
-                className="p-1 rounded-md text-[#777777] hover:text-[#ededed] hover:bg-[#202020] transition-colors"
+                className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
           </div>
@@ -98,8 +95,7 @@ export function PendingVerificationPage() {
             type="button"
             disabled={checking}
             onClick={handleCheckStatus}
-            className="w-full h-11 px-5 rounded-full bg-[#f1f1f1] hover:bg-white text-[#111111] text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
-            style={{ boxShadow: 'none' }}
+            className="w-full h-11 px-5 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-sm"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} />
             <span>{checking ? 'Checking…' : 'Check Verification Status'}</span>
@@ -108,8 +104,7 @@ export function PendingVerificationPage() {
           <button
             type="button"
             onClick={() => supabase.auth.signOut()}
-            className="w-full h-11 px-5 rounded-full border border-[#2a2a2a] bg-transparent hover:bg-[#202020] text-[#888888] hover:text-[#f1f1f1] text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
-            style={{ boxShadow: 'none' }}
+            className="w-full h-11 px-5 rounded-full border border-border bg-transparent hover:bg-secondary text-muted-foreground hover:text-foreground text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign out</span>
