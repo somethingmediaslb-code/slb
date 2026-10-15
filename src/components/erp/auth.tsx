@@ -479,13 +479,27 @@ export function SignupPage() {
       }
 
       if (!data.session) {
-        // If identities is an empty array, the user already exists in Supabase
+        // 1. If identities is empty, account already exists
         if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
           setError('An account with this email already exists. Please sign in instead.');
           setAlreadyRegistered(true);
         } else {
-          setSuccessNotice(`Verification email sent to ${email.trim()}! Please check your inbox and spam folder to activate your account.`);
-          toast.success('Account created! Please check your email.');
+          // 2. Attempt immediate sign-in (succeeds as soon as database auto-confirms or Supabase Confirm email is OFF)
+          try {
+            const { data: autoSignData } = await supabase.auth.signInWithPassword({
+              email: emailVal,
+              password,
+            });
+
+            if (autoSignData?.session) {
+              toast.success('Account created and signed in successfully!');
+              navigate({ to: '/' });
+              return;
+            }
+          } catch {}
+
+          setSuccessNotice(`Account created! To sign in immediately without waiting for emails, disable "Confirm email" in Supabase Dashboard (Authentication -> Providers -> Email) or run the 0007 migration.`);
+          toast.success('Account created! Please sign in.');
         }
       } else {
         toast.success('Account created successfully');

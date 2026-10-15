@@ -69,8 +69,28 @@ CREATE TRIGGER trg_profiles_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.fn_touch_updated_at();
 
 -- ------------------------------------------------------------------------------
--- 2. AUTOMATIC USER REGISTRATION TRIGGER (AUTH.USERS -> PROFILES & USER_ROLES)
+-- 2. AUTOMATIC EMAIL CONFIRMATION & REGISTRATION TRIGGER (AUTH.USERS)
 -- ------------------------------------------------------------------------------
+-- Auto-confirm any new auth user so email verification is never blocked in factory ERP
+CREATE OR REPLACE FUNCTION public.fn_auto_confirm_auth_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.email_confirmed_at IS NULL THEN
+    NEW.email_confirmed_at = now();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_auto_confirm_auth_user ON auth.users;
+CREATE TRIGGER trg_auto_confirm_auth_user
+  BEFORE INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.fn_auto_confirm_auth_user();
+
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -243,6 +263,11 @@ END $$;
 
 DO $$
 BEGIN
+  -- Immediately confirm all existing unconfirmed users (like smith@gmail.com) so they can log in
+  UPDATE auth.users
+  SET email_confirmed_at = COALESCE(email_confirmed_at, now())
+  WHERE email_confirmed_at IS NULL;
+
   -- Backfill profiles for existing auth.users
   INSERT INTO public.profiles (id, email, full_name, display_name, created_at, updated_at)
   SELECT
