@@ -191,6 +191,7 @@ export function Dashboard(){
             <h2>Order & Dispatch Overview</h2>
             <ThemedSelect
               className="w-32! h-8! text-xs!"
+              wrapperClassName="w-auto shrink-0"
               value={period}
               onChange={setPeriod}
               options={[

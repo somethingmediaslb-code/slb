@@ -118,7 +118,7 @@ export function Labour(){
     <>
       <MasterPage kind="workers" title="Labour Management"/>
       <section className="mt-8">
-        <div className="section-header flex items-center justify-between flex-wrap gap-2">
+        <div className="section-header flex items-center justify-between gap-4">
           <h2>Production Allocations & Productivity Tracking</h2>
           <div className="flex items-center gap-1.5 flex-wrap">
             <div className="flex items-center gap-1 bg-secondary/60 p-0.5 rounded-full text-xs">
@@ -405,7 +405,7 @@ export function Labour(){
       </section>
 
       <section className="mt-8">
-        <div className="section-header flex items-center justify-between flex-wrap gap-2">
+        <div className="section-header flex items-center justify-between gap-4">
           <h2>Payroll History & Date-wise Report</h2>
           <ExportButton
             onClick={() => downloadCsv('payroll-report', filteredPayroll.map(p => ({

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useRef, type ReactNode } from 'react';
 import { Search, PackageOpen, Download, Plus, ChevronDown, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -42,10 +42,18 @@ export function AccessNotice(){
 }
 
 export function SearchFilter({value,onChange,placeholder='Search records…'}:{value:string;onChange:(v:string)=>void;placeholder?:string}){
+  const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="crm-search-pill">
-      <Search className="size-3 text-muted-foreground shrink-0"/>
-      <input aria-label="Search records" placeholder={placeholder} value={value} onChange={e=>onChange(e.target.value)}/>
+    <div className="crm-search-pill" onClick={()=>inputRef.current?.focus()}>
+      <Search className="size-3 text-muted-foreground shrink-0 pointer-events-none"/>
+      <input
+        ref={inputRef}
+        aria-label="Search records"
+        placeholder={placeholder}
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+        className="!border-0 !outline-none !shadow-none !ring-0 !bg-transparent text-xs"
+      />
     </div>
   );
 }
@@ -183,6 +191,7 @@ export function ThemedSelect({
   required,
   size = 'default',
   className,
+  wrapperClassName,
   'aria-label': ariaLabel,
 }: {
   value?: string;
@@ -195,6 +204,7 @@ export function ThemedSelect({
   required?: boolean;
   size?: 'sm' | 'default';
   className?: string;
+  wrapperClassName?: string;
   'aria-label'?: string;
 }) {
   const [internalVal, setInternalVal] = useState(defaultValue ?? value ?? '');
@@ -210,7 +220,7 @@ export function ThemedSelect({
   };
 
   return (
-    <div className="relative w-full">
+    <div className={cn("relative", wrapperClassName || "w-full")}>
       {name && <input type="hidden" name={name} value={activeVal} required={required} />}
       <Select
         value={activeVal || undefined}

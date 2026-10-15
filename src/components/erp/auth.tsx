@@ -97,11 +97,28 @@ export function LoginPage() {
     setInfoNotice('');
     setShowResend(false);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
       if (signInError) throw signInError;
+
+      // Ensure profile record exists in profiles table
+      if (signInData?.user) {
+        try {
+          const userMeta = signInData.user.user_metadata || {};
+          const displayName = userMeta['display_name'] || userMeta['full_name'] || email.trim().split('@')[0];
+          await supabase.from('profiles').upsert({
+            id: signInData.user.id,
+            email: email.trim(),
+            display_name: displayName,
+            full_name: userMeta['full_name'] || displayName,
+          }, { onConflict: 'id' });
+        } catch {
+          // Non-blocking: background trigger also guarantees profile
+        }
+      }
+
       toast.success('Signed in successfully');
       navigate({ to: '/' });
     } catch (err: unknown) {
@@ -367,6 +384,7 @@ export function LoginPage() {
 }
 
 export function SignupPage() {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -413,6 +431,10 @@ export function SignupPage() {
 
   const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
+    if (!fullName.trim()) {
+      setError('Please enter your full name');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -426,14 +448,35 @@ export function SignupPage() {
     setSuccessNotice('');
     setAlreadyRegistered(false);
     try {
+      const nameVal = fullName.trim();
+      const emailVal = email.trim();
+
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: emailVal,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: nameVal,
+            display_name: nameVal,
+          },
         },
       });
       if (signUpError) throw signUpError;
+
+      // Upsert profile immediately if session or user was returned
+      if (data?.user) {
+        try {
+          await supabase.from('profiles').upsert({
+            id: data.user.id,
+            email: emailVal,
+            full_name: nameVal,
+            display_name: nameVal,
+          }, { onConflict: 'id' });
+        } catch {
+          // Non-blocking: database trigger on auth.users will also insert
+        }
+      }
 
       if (!data.session) {
         // If identities is an empty array, the user already exists in Supabase
@@ -632,6 +675,17 @@ export function SignupPage() {
 
         {/* Auth Form with UX placeholders acting as headings */}
         <form onSubmit={handleSignup} className="flex flex-col gap-3">
+          <input
+            type="text"
+            required
+            autoComplete="name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Full Name (e.g. Rahul Sharma)"
+            className="w-full h-11 px-5 rounded-full border border-border bg-input/40 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none transition-colors"
+            style={{ boxShadow: 'none' }}
+          />
+
           <input
             type="email"
             required

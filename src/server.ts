@@ -54,7 +54,7 @@ function constantTimeEqual(a: string, b: string): boolean {
 }
 
 async function handleTentativeCompletionsCron(request: Request, env: any): Promise<Response> {
-  const secret = process.env.CRON_SECRET || env?.CRON_SECRET;
+  const secret = process.env['CRON_SECRET'] || env?.CRON_SECRET;
   const provided = request.headers.get("x-cron-secret");
   if (!secret || !provided || !constantTimeEqual(secret, provided)) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {

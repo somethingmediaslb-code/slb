@@ -140,7 +140,7 @@ export function Orders(){
     }
     for(let i=0;i<lines.length;i++){
       const l=lines[i];
-      if(!l.box_type.trim()){
+      if(!l || !l.box_type.trim()){
         toast.error(`Item #${i+1}: Please select or enter a box type.`);
         return;
       }

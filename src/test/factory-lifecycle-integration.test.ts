@@ -229,7 +229,8 @@ describe('Factory Lifecycle, Relational Integrity & Quantity Flow (10 Pillars)',
 
     // Second cancellation attempt must be blocked
     let secondCancelAllowed = false;
-    if (dcStatus === 'Delivery Challan Made') {
+    const currentStatus: string = dcStatus;
+    if (currentStatus === 'Delivery Challan Made') {
       secondCancelAllowed = true;
     }
     expect(secondCancelAllowed).toBe(false); // Cannot cancel twice!
@@ -239,18 +240,19 @@ describe('Factory Lifecycle, Relational Integrity & Quantity Flow (10 Pillars)',
     const earned = 2000;
 
     // First payroll run
-    const activeDebt = borrowings[0].amount - borrowings[0].deducted;
+    const b0 = borrowings[0]!;
+    const activeDebt = b0.amount - b0.deducted;
     const deduction1 = Math.min(earned, activeDebt); // 2000
-    borrowings[0].deducted += deduction1;
+    b0.deducted += deduction1;
     const netPaid1 = earned - deduction1; // 0 (all used to repay advance)
 
     expect(deduction1).toBe(2000);
-    expect(borrowings[0].deducted).toBe(2000);
+    expect(b0.deducted).toBe(2000);
     expect(netPaid1).toBe(0);
 
     // Subsequent payroll check with 0 new earnings
     const newEarned = 0;
-    const remainingDebt = borrowings[0].amount - borrowings[0].deducted; // 1000
+    const remainingDebt = b0.amount - b0.deducted; // 1000
     const deduction2 = Math.min(newEarned, remainingDebt);
     expect(deduction2).toBe(0); // Zero earnings cannot trigger double deduction!
   });
@@ -312,24 +314,25 @@ describe('Factory Lifecycle, Relational Integrity & Quantity Flow (10 Pillars)',
 
     // Only dc-1 (Dispatched) should be realised
     expect(realised.length).toBe(1);
-    expect(realised[0].id).toBe('dc-1');
+    const r0 = realised[0]!;
+    expect(r0.id).toBe('dc-1');
 
     // Realised Revenue: 50 units * ₹500 = ₹25,000
-    expect(realised[0].revenue).toBe(25000);
+    expect(r0.revenue).toBe(25000);
 
     // Direct Labour: ₹1,500
-    expect(realised[0].labour).toBe(1500);
+    expect(r0.labour).toBe(1500);
 
     // Freight: ₹600
-    expect(realised[0].freight_charges).toBe(600);
+    expect(r0.freight_charges).toBe(600);
 
     // Direct Expenses (₹400) + Apportioned Shared (₹1,000 * 50 / 50 = ₹1,000) = ₹1,400
-    expect(realised[0].expenses).toBe(1400);
+    expect(r0.expenses).toBe(1400);
 
     // Net Realised Profit: 25,000 - 1,500 - 600 - 1,400 = 21,500
-    expect(realised[0].profit).toBe(21500);
+    expect(r0.profit).toBe(21500);
 
     // Margin: 21,500 / 25,000 * 100 = 86%
-    expect(realised[0].margin).toBe(86);
+    expect(r0.margin).toBe(86);
   });
 });

@@ -44,8 +44,11 @@ export function Settings(){
         setInstallPrompt(e);
       };
       window.addEventListener('beforeinstallprompt', handler);
-      return () => window.removeEventListener('beforeinstallprompt', handler);
+      return () => {
+        window.removeEventListener('beforeinstallprompt', handler);
+      };
     }
+    return undefined;
   },[]);
 
   async function installPwa(){
@@ -198,30 +201,50 @@ export function Settings(){
 }
 
 export function Profile(){
-  const {user,signIn}=useFactory();
+  const {user, profile, userRole, refresh}=useFactory();
   const [busy,setBusy]=useState(false);
 
   async function save(e:React.FormEvent<HTMLFormElement>){
     e.preventDefault();
+    if (!user) return;
     setBusy(true);
     const f=new FormData(e.currentTarget);
-    const displayName=String(f.get('name')??'');
-    const role=String(f.get('role')??'');
-    const phone=String(f.get('phone')??'');
+    const displayName=String(f.get('name')??'').trim();
+    const roleJobTitle=String(f.get('role')??'').trim();
+    const phone=String(f.get('phone')??'').trim();
+    const department=String(f.get('department')??'').trim();
 
-    const {error}=await supabase.auth.updateUser({
-      data:{
-        display_name:displayName,
-        role:role,
-        phone:phone,
-      }
-    });
+    try {
+      // 1. Update Auth metadata
+      const {error: authErr}=await supabase.auth.updateUser({
+        data:{
+          display_name:displayName,
+          full_name:displayName,
+          job_title:roleJobTitle,
+          phone:phone,
+          department:department,
+        }
+      });
+      if (authErr) throw authErr;
 
-    setBusy(false);
-    if(error){
-      toast.error(error.message);
-    } else {
-      toast.success('Profile details saved successfully');
+      // 2. Update Database public.profiles table
+      const {error: profileErr}=await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email ?? '',
+        display_name: displayName,
+        full_name: displayName,
+        phone: phone || null,
+        department: department || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+      if (profileErr) throw profileErr;
+
+      await refresh();
+      toast.success('Profile details saved to database');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Could not save profile');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -245,7 +268,8 @@ export function Profile(){
     );
   }
 
-  const initials=(user.user_metadata['display_name']||user.email||'U').slice(0,2).toUpperCase();
+  const currentDisplayName = profile?.display_name || profile?.full_name || user.user_metadata['display_name'] || user.user_metadata['full_name'] || user.email?.split('@')[0] || 'Team Member';
+  const initials=currentDisplayName.slice(0,2).toUpperCase();
 
   return (
     <div className="settings-page">
@@ -258,13 +282,13 @@ export function Profile(){
         </div>
         <div>
           <h2 className="text-lg font-medium leading-tight">
-            {user.user_metadata['display_name'] || 'Team Member'}
+            {currentDisplayName}
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
           <div className="flex items-center gap-2 mt-2">
-            <span className="pill">{user.user_metadata['role'] || 'Workspace Member'}</span>
+            <span className="pill uppercase text-[10px] tracking-wide font-semibold">{userRole || 'Workspace Member'}</span>
             <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-success"/> Authenticated Account
+              <CheckCircle2 className="w-3.5 h-3.5 text-success"/> Database Profile Active
             </span>
           </div>
         </div>
@@ -278,18 +302,27 @@ export function Profile(){
             Full Name / Display Name
             <input
               name="name"
-              defaultValue={user.user_metadata['display_name'] ?? ''}
+              defaultValue={profile?.display_name || profile?.full_name || (user.user_metadata['display_name'] ?? '')}
               placeholder="e.g. Jensen Ackles"
               required
             />
           </label>
 
           <label>
-            Job Title / Role
+            Department / Area
+            <input
+              name="department"
+              defaultValue={profile?.department || (user.user_metadata['department'] ?? '')}
+              placeholder="e.g. Packaging & Dispatch, Production Floor"
+            />
+          </label>
+
+          <label>
+            Job Title / Designation
             <input
               name="role"
-              defaultValue={user.user_metadata['role'] ?? ''}
-              placeholder="e.g. Account Executive, Plant Manager"
+              defaultValue={user.user_metadata['job_title'] || (user.user_metadata['role'] ?? '')}
+              placeholder="e.g. Plant Supervisor, Account Executive"
             />
           </label>
 
@@ -297,7 +330,7 @@ export function Profile(){
             Contact Phone
             <input
               name="phone"
-              defaultValue={user.user_metadata['phone'] ?? ''}
+              defaultValue={profile?.phone || (user.user_metadata['phone'] ?? '')}
               placeholder="e.g. +91 98765 43210"
             />
           </label>
@@ -306,11 +339,16 @@ export function Profile(){
             Registered Email
             <input readOnly value={user.email ?? ''} className="opacity-70 cursor-not-allowed"/>
           </label>
+
+          <label>
+            Database User ID
+            <input readOnly value={user.id} className="opacity-70 cursor-not-allowed font-mono text-[11px]"/>
+          </label>
         </div>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-border">
-          <Button disabled={busy} type="submit">
-            {busy ? 'Saving…' : 'Save Profile'}
+          <Button disabled={busy} type="submit" className="rounded-full shadow-none">
+            {busy ? 'Saving…' : 'Save Profile Changes'}
           </Button>
         </div>
       </form>
@@ -351,17 +389,40 @@ export function Admin(){
 
   useEffect(()=>{
     loadUsers();
-  },[isAdmin]);
+  },[isAdmin, d.roles.length, d.profiles.length]);
 
-  // Merge server users with roles from data.roles
+  // Merge server users with roles from data.roles and profiles from data.profiles
   const allUsersMap=new Map<string, AdminUserRecord>();
 
-  // Add server users
+  // 1. Add server users
   for(const u of users){
     allUsersMap.set(u.id,u);
   }
 
-  // Add any users from d.roles that might not be in auth list
+  // 2. Add any users from d.profiles
+  for(const p of d.profiles){
+    const assignedRole=(d.roles.find(r=>r.user_id===p.id)?.role as import('./provider').AppRole) || 'pending';
+    if(!allUsersMap.has(p.id)){
+      allUsersMap.set(p.id,{
+        id:p.id,
+        email:p.email,
+        created_at:p.created_at,
+        role:assignedRole,
+        display_name:p.display_name||p.full_name||p.email.split('@')[0]||null,
+        full_name:p.full_name||null,
+        phone:p.phone||null,
+        department:p.department||null,
+      });
+    } else {
+      const existing=allUsersMap.get(p.id)!;
+      if(p.display_name) existing.display_name=p.display_name;
+      if(p.full_name) existing.full_name=p.full_name;
+      if(p.phone) existing.phone=p.phone;
+      if(p.department) existing.department=p.department;
+    }
+  }
+
+  // 3. Add any users from d.roles that might not be in auth list or profiles list
   for(const r of d.roles){
     if(!allUsersMap.has(r.user_id)){
       allUsersMap.set(r.user_id,{
@@ -391,7 +452,7 @@ export function Admin(){
   const userList=Array.from(allUsersMap.values());
 
   const filteredUsers=userList.filter(u=>{
-    const matchesSearch=(u.email+' '+u.id+' '+(u.display_name||'')).toLowerCase().includes(search.toLowerCase());
+    const matchesSearch=(u.email+' '+u.id+' '+(u.display_name||'')+' '+(u.full_name||'')).toLowerCase().includes(search.toLowerCase());
     const matchesRole=filterRole==='All'||u.role===filterRole;
     return matchesSearch&&matchesRole;
   });
@@ -410,11 +471,11 @@ export function Admin(){
     if(record){
       setTargetUser(record);
       setTargetIdOrEmail(record.email||record.id);
-      setSelectedRole(record.role==='pending'?'supervisor':record.role);
+      setSelectedRole(record.role==='pending'?'manager':record.role);
     } else {
       setTargetUser(null);
       setTargetIdOrEmail('');
-      setSelectedRole('supervisor');
+      setSelectedRole('manager');
     }
     setHandoverModalOpen(true);
   };
@@ -439,7 +500,7 @@ export function Admin(){
     }
   };
 
-  const handleQuickHandover=async(record:AdminUserRecord,role:'admin'|'user')=>{
+  const handleQuickHandover=async(record:AdminUserRecord,role:import('./provider').AppRole)=>{
     const ok=await handoverRole(record.id,role);
     if(ok)await loadUsers();
   };
@@ -650,21 +711,29 @@ export function Admin(){
                         <>
                           <Button
                             size="sm"
-                            variant="outline"
                             className="rounded-full shadow-none text-xs h-7 px-3 bg-primary text-primary-foreground hover:bg-primary/90 border-0"
                             style={{boxShadow:'none'}}
-                            onClick={()=>handleQuickHandover(u,'user')}
+                            onClick={()=>handleOpenHandover(u)}
                           >
-                            <UserCheck className="w-3 h-3 mr-1"/> Handover User Role
+                            <UserCheck className="w-3 h-3 mr-1"/> Assign Role
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="rounded-full shadow-none text-xs h-7 px-3"
+                            className="rounded-full shadow-none text-xs h-7 px-2.5"
+                            style={{boxShadow:'none'}}
+                            onClick={()=>handleQuickHandover(u,'manager')}
+                          >
+                            Manager
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full shadow-none text-xs h-7 px-2.5"
                             style={{boxShadow:'none'}}
                             onClick={()=>handleQuickHandover(u,'admin')}
                           >
-                            Make Admin
+                            Admin
                           </Button>
                         </>
                       ) : isCurrentUser ? (
@@ -676,10 +745,10 @@ export function Admin(){
                             variant="outline"
                             className="rounded-full shadow-none text-xs h-7 px-3"
                             style={{boxShadow:'none'}}
-                            onClick={()=>handleQuickHandover(u,u.role==='admin'?'user':'admin')}
+                            onClick={()=>handleOpenHandover(u)}
                           >
                             <ArrowRightLeft className="w-3 h-3 mr-1"/>
-                            {u.role==='admin'?'Switch to User':'Promote Admin'}
+                            Change Role
                           </Button>
                           <Button
                             size="sm"
@@ -732,9 +801,9 @@ export function Admin(){
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-primary/10 text-primary border border-primary/20">
                     Admin
                   </span>
-                ) : u.role==='user' ? (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-foreground border border-border">
-                    User
+                ) : u.role!=='pending' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-foreground border border-border capitalize">
+                    {u.role.replace('_', ' ')}
                   </span>
                 ) : (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/30">
@@ -765,14 +834,14 @@ export function Admin(){
                       size="sm"
                       className="flex-1 rounded-full shadow-none text-xs bg-primary text-primary-foreground"
                       style={{boxShadow:'none'}}
-                      onClick={()=>handleQuickHandover(u,'user')}
+                      onClick={()=>handleOpenHandover(u)}
                     >
-                      <UserCheck className="w-3.5 h-3.5 mr-1"/> Handover User Role
+                      <UserCheck className="w-3.5 h-3.5 mr-1"/> Assign Role
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-full shadow-none text-xs"
+                      className="rounded-full shadow-none text-xs px-3"
                       style={{boxShadow:'none'}}
                       onClick={()=>handleQuickHandover(u,'admin')}
                     >
@@ -788,10 +857,10 @@ export function Admin(){
                       variant="outline"
                       className="flex-1 rounded-full shadow-none text-xs"
                       style={{boxShadow:'none'}}
-                      onClick={()=>handleQuickHandover(u,u.role==='admin'?'user':'admin')}
+                      onClick={()=>handleOpenHandover(u)}
                     >
                       <ArrowRightLeft className="w-3.5 h-3.5 mr-1"/>
-                      {u.role==='admin'?'Switch to User':'Make Admin'}
+                      Change Role
                     </Button>
                     <Button
                       size="sm"

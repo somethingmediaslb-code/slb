@@ -10,6 +10,9 @@ export interface AdminUserRecord {
   role: AppRole;
   last_sign_in_at?: string | null;
   display_name?: string | null;
+  full_name?: string | null;
+  phone?: string | null;
+  department?: string | null;
 }
 
 const VALID_ROLES = new Set<AppRole>([
@@ -39,17 +42,17 @@ export const adminListUsers = createServerFn({method: 'POST'})
         throw new Error('Only administrators can access the user management panel');
       }
 
-      // Fetch all users from Supabase Auth admin API
-      const {data: authData, error: authError} = await supabaseAdmin.auth.admin.listUsers({
-        page: 1,
-        perPage: 100,
-      });
+      // 1. Fetch all profiles from public.profiles table
+      const {data: profilesData} = await supabaseAdmin
+        .from('profiles')
+        .select('*');
 
-      if (authError) {
-        console.warn('Could not list auth users via admin API:', authError.message);
+      const profilesMap = new Map<string, any>();
+      for (const p of profilesData ?? []) {
+        profilesMap.set(p.id, p);
       }
 
-      // Fetch all assigned roles from user_roles table
+      // 2. Fetch all assigned roles from user_roles table
       const {data: rolesData, error: rolesError} = await supabaseAdmin
         .from('user_roles')
         .select('*');
@@ -65,22 +68,59 @@ export const adminListUsers = createServerFn({method: 'POST'})
         }
       }
 
-      const users: AdminUserRecord[] = (authData?.users ?? []).map(u => {
+      // 3. Fetch all users from Supabase Auth admin API if available
+      const {data: authData, error: authError} = await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 100,
+      });
+
+      if (authError) {
+        console.warn('Could not list auth users via admin API:', authError.message);
+      }
+
+      const userMap = new Map<string, AdminUserRecord>();
+
+      // First add from auth.admin.listUsers
+      for (const u of authData?.users ?? []) {
+        const profile = profilesMap.get(u.id);
         const assignedRole = rolesMap.get(u.id);
         const metadataRole = u.user_metadata?.['role'] as AppRole | undefined;
         const roleCandidate = assignedRole || metadataRole || 'pending';
         const role = VALID_ROLES.has(roleCandidate as AppRole) ? (roleCandidate as AppRole) : 'pending';
 
-        return {
+        userMap.set(u.id, {
           id: u.id,
-          email: u.email ?? 'no-email',
-          created_at: u.created_at,
-          last_sign_in_at: u.last_sign_in_at,
-          display_name: u.user_metadata?.['display_name'] || u.email?.split('@')[0],
+          email: profile?.email || u.email || 'no-email',
+          created_at: profile?.created_at || u.created_at,
+          last_sign_in_at: u.last_sign_in_at ?? null,
+          display_name: profile?.display_name || profile?.full_name || u.user_metadata?.['display_name'] || u.email?.split('@')[0] || null,
+          full_name: profile?.full_name || null,
+          phone: profile?.phone || null,
+          department: profile?.department || null,
           role,
-        };
-      });
+        });
+      }
 
+      // Also merge any profiles from profiles table that might not be in auth page (or if auth listing was partial)
+      for (const p of profilesData ?? []) {
+        if (!userMap.has(p.id)) {
+          const assignedRole = rolesMap.get(p.id) || 'pending';
+          const role = VALID_ROLES.has(assignedRole as AppRole) ? (assignedRole as AppRole) : 'pending';
+          userMap.set(p.id, {
+            id: p.id,
+            email: p.email,
+            created_at: p.created_at,
+            last_sign_in_at: null,
+            display_name: p.display_name || p.full_name || p.email.split('@')[0] || null,
+            full_name: p.full_name || null,
+            phone: p.phone || null,
+            department: p.department || null,
+            role,
+          });
+        }
+      }
+
+      const users: AdminUserRecord[] = Array.from(userMap.values());
       return {users, success: true};
     } catch (err: unknown) {
       console.error('adminListUsers server error:', err);
@@ -168,6 +208,13 @@ export const adminHandoverRole = createServerFn({method: 'POST'})
         console.warn('Could not update user metadata:', updateErr);
       }
 
+      // 7. Emit realtime ping so pending screen transitions immediately
+      try {
+        await supabaseAdmin.from('factory_data_pings').insert({
+          change_source: `role_change:${targetUserId}:${role}`
+        });
+      } catch {}
+
       return {success: true, targetUserId, role};
     } catch (err: unknown) {
       console.error('adminHandoverRole error:', err);
@@ -211,21 +258,24 @@ export const adminRevokeRole = createServerFn({method: 'POST'})
         }
       }
 
-      const {error: deleteError} = await supabaseAdmin
+      // Set role back to pending in user_roles table so data persists
+      const {error: updateError} = await supabaseAdmin
         .from('user_roles')
-        .delete()
-        .eq('user_id', targetUserId);
+        .upsert(
+          {user_id: targetUserId, role: 'pending'},
+          {onConflict: 'user_id'}
+        );
 
-      if (deleteError) {
-        console.error('Failed to delete user role:', deleteError.message);
-        throw new Error(deleteError.message);
+      if (updateError) {
+        console.error('Failed to set user role to pending:', updateError.message);
+        throw new Error(updateError.message);
       }
 
       try {
         await supabaseAdmin.from('audit_logs').insert({
           table_name: 'user_roles',
           record_id: targetUserId,
-          action: 'DELETE',
+          action: 'UPDATE',
           old_data: {role: targetRoleRow?.role},
           new_data: {role: 'pending'},
           changed_fields: {role: {old: targetRoleRow?.role, new: 'pending'}},
@@ -242,6 +292,13 @@ export const adminRevokeRole = createServerFn({method: 'POST'})
       } catch (updateErr) {
         console.warn('Could not update user metadata:', updateErr);
       }
+
+      // Emit realtime ping
+      try {
+        await supabaseAdmin.from('factory_data_pings').insert({
+          change_source: `role_revoked:${targetUserId}`
+        });
+      } catch {}
 
       return {success: true, targetUserId};
     } catch (err: unknown) {

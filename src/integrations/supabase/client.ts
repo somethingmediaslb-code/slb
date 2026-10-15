@@ -48,12 +48,12 @@ function createSupabaseFetch(supabaseUrl: string, supabaseKey: string): typeof f
 function createSupabaseClient() {
   // Use static dot-notation for Vite build-time replacement, fall back to SSR or default project credentials
   const SUPABASE_URL =
-    import.meta.env.VITE_SUPABASE_URL ||
+    import.meta.env['VITE_SUPABASE_URL'] ||
     (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'] : undefined) ||
     'https://noiuvevcvxlxqmrkqjpn.supabase.co';
 
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
     (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || process.env['SUPABASE_PUBLISHABLE_KEY'] : undefined) ||
     'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy';
 

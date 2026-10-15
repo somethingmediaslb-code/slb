@@ -23,6 +23,7 @@ import {
   UserRound,
   AlertTriangle,
   Check,
+  PanelLeft,
   Sun,
   Moon,
   BarChart3,
@@ -211,9 +212,29 @@ export const navigation = [
 export function AppShell({children}:{children:ReactNode}){
   const path=useRouterState({select:s=>s.location.pathname});
   const [open,setOpen]=useState(false);
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('slbw_sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
   const [alerts,setAlerts]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
   const {user,data,signIn,isPendingVerification,userRole,isAdmin}=useFactory();
+
+  const toggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setOpen(prev => !prev);
+    } else {
+      setCollapsed(prev => {
+        const next = !prev;
+        try {
+          localStorage.setItem('slbw_sidebar_collapsed', String(next));
+        } catch {}
+        return next;
+      });
+    }
+  };
 
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
@@ -354,18 +375,29 @@ export function AppShell({children}:{children:ReactNode}){
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${collapsed ? 'collapsed' : ''}`} data-collapsed={collapsed ? "true" : "false"}>
       <div className={'mobile-scrim '+(open?'open':'')} onClick={()=>setOpen(false)}/>
       
-      <aside className={'sidebar '+(open?'open':'')}>
+      <aside className={`sidebar ${open ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`} data-collapsed={collapsed ? "true" : "false"}>
         <div className="sidebar-inner">
-          {/* Brand Header - Clean typography without company logo */}
-          <Link className="brand-header" to="/" onClick={()=>setOpen(false)}>
-            <div className="brand-text">
-              <span className="brand-title">SLBW</span>
-              <span className="brand-sub">Wooden box manufacturing</span>
-            </div>
-          </Link>
+          {/* Brand Header - Matches topbar height (56px) */}
+          <div className="brand-header">
+            <Link className="brand-link" to="/" onClick={()=>setOpen(false)} title="SLBW Home">
+              <div className="brand-text">
+                <span className="brand-title">SLBW</span>
+                <span className="brand-sub">Wooden box manufacturing</span>
+              </div>
+            </Link>
+            <button
+              type="button"
+              className="brand-collapse-btn hidden lg:flex"
+              onClick={toggleSidebar}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <PanelLeft size={14} className={collapsed ? "rotate-180" : ""} />
+            </button>
+          </div>
 
           {/* Navigation Scroll Area */}
           <div className="sidebar-scroll">
@@ -385,11 +417,12 @@ export function AppShell({children}:{children:ReactNode}){
                     <li key={n.to}>
                       <Link
                         to={n.to}
+                        title={n.label}
                         data-active={active ? "true" : "false"}
                         className={'nav-link ' + (active ? 'active' : '')}
                         onClick={() => setOpen(false)}
                       >
-                        <n.icon size={14} />
+                        <n.icon size={15} />
                         <span className="nav-label">{n.label}</span>
                         {count !== undefined && count > 0 && (
                           <span className="nav-count-badge">{count}</span>
@@ -418,11 +451,12 @@ export function AppShell({children}:{children:ReactNode}){
                       <li key={n.to}>
                         <Link
                           to={n.to}
+                          title={n.label}
                           data-active={active ? "true" : "false"}
                           className={'nav-link ' + (active ? 'active' : '')}
                           onClick={() => setOpen(false)}
                         >
-                          <n.icon size={14} />
+                          <n.icon size={15} />
                           <span className="nav-label">{n.label}</span>
                           {count !== undefined && count > 0 && (
                             <span className="nav-count-badge">{count}</span>
@@ -447,11 +481,12 @@ export function AppShell({children}:{children:ReactNode}){
                       <li key={n.to}>
                         <Link
                           to={n.to}
+                          title={n.label}
                           data-active={active ? "true" : "false"}
                           className={'nav-link ' + (active ? 'active' : '')}
                           onClick={() => setOpen(false)}
                         >
-                          <n.icon size={14} />
+                          <n.icon size={15} />
                           <span className="nav-label">{n.label}</span>
                         </Link>
                       </li>
@@ -464,7 +499,7 @@ export function AppShell({children}:{children:ReactNode}){
 
           {/* Bottom Capacity Card & User Profile */}
           <div className="sidebar-bottom">
-            <div className="sidebar-capacity-card">
+            <div className="sidebar-capacity-card" title={`Plant Online: ${activeRunsCount} active production ${activeRunsCount === 1 ? 'run' : 'runs'}`}>
               <div className="capacity-text">
                 <div className="capacity-title">
                   <span className="capacity-dot" /> Plant Online
@@ -476,6 +511,9 @@ export function AppShell({children}:{children:ReactNode}){
               <Link to="/orders" className="capacity-btn" onClick={() => setOpen(false)}>
                 Orders
               </Link>
+              <div className="capacity-collapsed-dot">
+                <span className="capacity-dot" />
+              </div>
             </div>
 
             {user ? (
@@ -484,11 +522,12 @@ export function AppShell({children}:{children:ReactNode}){
                   type="button"
                   onClick={() => setProfileOpen(true)}
                   className="sidebar-user-trigger"
+                  title={`${userName} (${user.user_metadata['job_title'] || userRole || 'User'})`}
                 >
                   <span className="avatar !w-6 !h-6 !text-[10px] font-semibold bg-primary text-primary-foreground flex-shrink-0">
                     {userInitial}
                   </span>
-                  <div className="truncate text-left min-w-0">
+                  <div className="truncate text-left min-w-0 user-details">
                     <div className="text-xs font-medium text-foreground truncate">{userName}</div>
                     <div className="text-[10px] text-muted-foreground truncate">{user.user_metadata['job_title'] || (userRole === 'admin' ? 'Administrator' : (userRole || 'User'))}</div>
                   </div>
@@ -499,7 +538,7 @@ export function AppShell({children}:{children:ReactNode}){
                   aria-label="Sign out"
                   title="Sign out"
                   onClick={() => supabase.auth.signOut()}
-                  className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive"
+                  className="h-7 w-7 flex-shrink-0 text-muted-foreground hover:text-destructive user-logout-btn"
                 >
                   <LogOut size={13} />
                 </Button>
@@ -508,7 +547,7 @@ export function AppShell({children}:{children:ReactNode}){
               <div className="p-2 border-t border-sidebar-border bg-sidebar">
                 <Link to="/login" className="block w-full">
                   <Button variant="outline" size="sm" className="w-full justify-start gap-2 h-7 text-xs border-border hover:bg-secondary">
-                    <UserRound size={13} /> Sign in
+                    <UserRound size={13} /> <span className="user-details">Sign in</span>
                   </Button>
                 </Link>
               </div>
@@ -519,20 +558,21 @@ export function AppShell({children}:{children:ReactNode}){
 
       <div className="main-shell">
         <header className="topbar">
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <button
               type="button"
-              className="topbar-icon-btn lg:hidden"
-              aria-label={open ? 'Close navigation' : 'Open navigation'}
-              onClick={() => setOpen(!open)}
+              className="topbar-icon-btn shrink-0"
+              aria-label={collapsed || !open ? 'Toggle navigation' : 'Close navigation'}
+              title="Toggle menu"
+              onClick={toggleSidebar}
             >
-              {open ? <X size={14} /> : <Menu size={14} />}
+              <Menu size={15} />
             </button>
-            <nav aria-label="Breadcrumb" className="topbar-breadcrumb truncate">
-              <span className="topbar-breadcrumb-root">Workspace</span>
-              <span className="topbar-breadcrumb-sep">/</span>
-              <span className="topbar-breadcrumb-current">{currentTitle}</span>
-            </nav>
+            <div className="topbar-page-heading truncate">
+              <h1 className="topbar-title truncate" title={currentTitle}>
+                {currentTitle}
+              </h1>
+            </div>
           </div>
 
           <div className="top-tools">
@@ -540,8 +580,8 @@ export function AppShell({children}:{children:ReactNode}){
               <Search size={14} />
             </Link>
 
-            {/* Theme options: Dark - Light switcher just beside search icon */}
-            <div className="theme-switcher-pill" role="radiogroup" aria-label="Theme options">
+            {/* Theme options: pill on sm+, compact single icon button on mobile */}
+            <div className="hidden sm:inline-flex theme-switcher-pill" role="radiogroup" aria-label="Theme options">
               <button
                 type="button"
                 className={`theme-switcher-opt ${theme === 'dark' ? 'active' : ''}`}
@@ -565,6 +605,16 @@ export function AppShell({children}:{children:ReactNode}){
                 <span>Light</span>
               </button>
             </div>
+
+            <button
+              type="button"
+              className="sm:hidden topbar-icon-btn"
+              onClick={() => toggleTheme(theme === 'dark' ? 'light' : 'dark')}
+              title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
 
             <Popover open={alerts} onOpenChange={setAlerts}>
               <PopoverTrigger asChild>
@@ -701,9 +751,9 @@ export function AppShell({children}:{children:ReactNode}){
               </button>
             ) : (
               <Link to="/login" className="no-underline">
-                <button type="button" className="topbar-profile-btn">
+                <button type="button" className="topbar-profile-btn" title="Sign in" aria-label="Sign in">
                   <UserRound size={13} />
-                  <span>Sign in</span>
+                  <span className="hidden sm:inline">Sign in</span>
                 </button>
               </Link>
             )}

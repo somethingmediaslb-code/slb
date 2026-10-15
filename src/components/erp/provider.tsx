@@ -95,18 +95,19 @@ const tables = {
   borrowings: 'v_labour_borrowings',
   payroll: 'v_labour_payroll',
   notifications: 'factory_notifications',
-  roles: 'user_roles'
+  roles: 'user_roles',
+  profiles: 'profiles'
 } as const;
 
 async function readFactory(): Promise<FactoryData> {
   const result = { ...emptyData };
   await Promise.all(
     Object.entries(tables).map(async ([key, table]) => {
-      let { data, error } = await supabase.from(table).select('*');
+      let { data, error } = await (supabase.from as any)(table).select('*');
       if (error && table.startsWith('v_')) {
         // Graceful fallback to the underlying base table if the sanitized view is not yet compiled
         const baseTable = table.replace(/^v_/, '');
-        const fallback = await supabase.from(baseTable).select('*');
+        const fallback = await (supabase.from as any)(baseTable).select('*');
         if (!fallback.error) {
           data = fallback.data;
           error = null;
@@ -134,6 +135,7 @@ async function readFactory(): Promise<FactoryData> {
 
 interface Context {
   user: User | null;
+  profile: FactoryData['profiles'][number] | null;
   data: FactoryData;
   loading: boolean;
   error: string | null;
@@ -176,14 +178,24 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     return () => data.subscription.unsubscribe();
   }, [cache]);
 
-  // Realtime subscription listens strictly to zero-data change pings table
+  // Realtime subscription listens to zero-data change pings, user_roles and profiles
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel('factory-live-pings')
+      .channel(`factory-live-sync-${user.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'factory_data_pings' },
+        () => cache.invalidateQueries({ queryKey: ['factory'] })
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'user_roles' },
+        () => cache.invalidateQueries({ queryKey: ['factory'] })
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
         () => cache.invalidateQueries({ queryKey: ['factory'] })
       )
       .subscribe();
@@ -314,12 +326,14 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const profile = user ? (query.data?.profiles ?? []).find(p => p.id === user.id) || null : null;
   const hasCapability = (capability: string) => roleHasCapability(userRole, capability);
 
   return (
     <FactoryContext.Provider
       value={{
         user,
+        profile,
         data: query.data ?? emptyData,
         loading: query.isLoading,
         error: query.error?.message ?? null,
