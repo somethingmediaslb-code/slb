@@ -59,11 +59,14 @@ export function SearchFilter({value,onChange,placeholder='Search records…'}:{v
       <Search className="size-3 text-muted-foreground shrink-0 pointer-events-none"/>
       <input
         ref={inputRef}
+        type="search"
+        inputMode="search"
+        autoComplete="off"
         aria-label="Search records"
         placeholder={placeholder}
         value={value}
         onChange={e=>onChange(e.target.value)}
-        className="!border-0 !outline-none !shadow-none !ring-0 !bg-transparent text-xs"
+        className="!border-0 !outline-none !shadow-none !ring-0 !bg-transparent text-xs sm:text-xs"
       />
     </div>
   );
@@ -523,6 +526,7 @@ export function DateFilterPill({
       <PopoverContent
         align="start"
         sideOffset={6}
+        collisionPadding={12}
         className="w-[264px] p-0 border border-border bg-card rounded-xl shadow-2xl text-foreground z-50 overflow-hidden"
       >
         <ThemedCalendar
@@ -586,7 +590,7 @@ export function ThemedDatePicker({
             disabled={disabled}
             aria-label={ariaLabel || placeholder}
             className={cn(
-              "flex h-[38px] min-h-[38px] w-full items-center justify-between rounded-lg border border-border bg-[var(--input-bg)] px-3 py-2 text-sm text-foreground shadow-sm hover:border-primary/50 dark:hover:border-[#484848] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:focus:ring-ring dark:focus:ring-offset-1 dark:focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 transition-colors text-left",
+              "flex h-[42px] sm:h-[38px] min-h-[42px] sm:min-h-[38px] w-full items-center justify-between rounded-lg border border-border bg-[var(--input-bg)] px-3 py-2 text-sm text-foreground shadow-sm hover:border-primary/50 dark:hover:border-[#484848] focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:focus:ring-ring dark:focus:ring-offset-1 dark:focus:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 transition-colors text-left",
               !activeVal && "text-muted-foreground",
               className
             )}
@@ -598,6 +602,7 @@ export function ThemedDatePicker({
         <PopoverContent
           align="start"
           sideOffset={6}
+          collisionPadding={12}
           className="w-[264px] p-0 border border-border bg-card rounded-xl shadow-2xl text-foreground z-[9999] overflow-hidden"
         >
           <ThemedCalendar

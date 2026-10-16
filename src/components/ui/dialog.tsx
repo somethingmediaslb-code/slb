@@ -38,13 +38,13 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "dialog-surface fixed left-1/2 top-1/2 z-50 flex flex-col w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2.5rem)] max-h-[calc(100vh-2.5rem)] rounded-xl border bg-card p-6 shadow-2xl overflow-y-auto overscroll-contain focus:outline-none",
+        "dialog-surface fixed left-1/2 top-1/2 z-50 flex flex-col w-[calc(100%-1.5rem)] sm:w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] rounded-2xl md:rounded-xl border border-border bg-card p-5 sm:p-6 shadow-2xl overflow-y-auto overscroll-contain focus:outline-none",
         className,
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background cursor-pointer transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground z-20">
+      <DialogPrimitive.Close className="absolute right-2 top-2 sm:right-4 sm:top-4 w-11 h-11 sm:w-8 sm:h-8 flex items-center justify-center rounded-full opacity-70 ring-offset-background cursor-pointer transition-all hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground z-20">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>

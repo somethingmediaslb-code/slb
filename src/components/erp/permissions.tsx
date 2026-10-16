@@ -445,7 +445,7 @@ export function PagePermissions() {
           )}
         </div>
 
-        <div className="flex items-center gap-3 self-end md:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto justify-between md:justify-end">
           {hasChanges && (
             <span className="inline-flex items-center gap-1.5 text-xs text-amber-500 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -453,14 +453,14 @@ export function PagePermissions() {
             </span>
           )}
 
-          <div className="relative">
+          <div className="relative flex-1 sm:flex-initial">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search pages…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="h-8 pl-8 pr-3 w-40 text-xs rounded-lg border border-border bg-secondary/50 placeholder:text-muted-foreground focus:outline-none focus:border-foreground/40 transition-colors"
+              className="h-8 pl-8 pr-3 w-full sm:w-44 text-xs rounded-lg border border-border bg-secondary/50 placeholder:text-muted-foreground focus:outline-none focus:border-foreground/40 transition-colors"
             />
           </div>
 

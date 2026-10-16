@@ -28,6 +28,8 @@ import {
   Moon,
   BarChart3,
   KeyRound,
+  Plus,
+  MoreHorizontal,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
@@ -413,6 +415,18 @@ export function AppShell({children}:{children:ReactNode}){
     document.title = currentTitle ? `${currentTitle} | SLBW` : 'SLBW';
   }
 
+  const getFabAction = () => {
+    if (path.startsWith('/orders')) return { to: '/orders' as const, search: { new: true }, title: 'New Order' };
+    if (path.startsWith('/production')) return { to: '/orders' as const, search: { new: true }, title: 'New Production Run' };
+    if (path.startsWith('/dispatch')) return { to: '/dispatch' as const, search: { new: true }, title: 'New Challan' };
+    if (path.startsWith('/parties')) return { to: '/parties' as const, search: { new: true }, title: 'New Party' };
+    if (path.startsWith('/items')) return { to: '/items' as const, search: { new: true }, title: 'New Item' };
+    if (path.startsWith('/labour')) return { to: '/labour' as const, search: { new: true }, title: 'New Labour' };
+    if (path.startsWith('/expenses')) return { to: '/expenses' as const, search: { new: true }, title: 'New Expense' };
+    return { to: '/orders' as const, search: { new: true }, title: 'New Order' };
+  };
+  const fab = getFabAction();
+
   return (
     <div className={`app-shell ${collapsed ? 'collapsed' : ''}`} data-collapsed={collapsed ? "true" : "false"}>
       <div className={'mobile-scrim '+(open?'open':'')} onClick={()=>setOpen(false)}/>
@@ -428,7 +442,7 @@ export function AppShell({children}:{children:ReactNode}){
             </Link>
             <button
               type="button"
-              className="brand-collapse-btn hidden lg:flex"
+              className="brand-collapse-btn hidden md:flex"
               onClick={toggleSidebar}
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -823,6 +837,79 @@ export function AppShell({children}:{children:ReactNode}){
             children
           )}
         </main>
+
+        {/* Mobile Floating Action Button (FAB) */}
+        {user && !isPageDenied && (
+          <Link
+            to={fab.to}
+            search={fab.search}
+            className="mobile-fab md:hidden"
+            title={fab.title}
+            aria-label={fab.title}
+            onClick={() => setOpen(false)}
+          >
+            <Plus size={22} className="stroke-[2.5]" />
+          </Link>
+        )}
+
+        {/* Mobile Fixed Bottom Tab Bar */}
+        <nav className="mobile-bottom-bar md:hidden" aria-label="Mobile Navigation">
+          <Link
+            to="/"
+            onClick={() => setOpen(false)}
+            className={`mobile-bottom-tab ${isNavActive('/') ? 'active' : ''}`}
+            aria-label="Dashboard"
+          >
+            <LayoutDashboard />
+            <span>Dashboard</span>
+          </Link>
+
+          <Link
+            to="/orders"
+            onClick={() => setOpen(false)}
+            className={`mobile-bottom-tab ${isNavActive('/orders') ? 'active' : ''}`}
+            aria-label="Orders"
+          >
+            <ClipboardList />
+            <span>Orders</span>
+            {data.orders.length > 0 && (
+              <span className="mobile-tab-badge">{data.orders.length > 99 ? '99+' : data.orders.length}</span>
+            )}
+          </Link>
+
+          <Link
+            to="/production"
+            onClick={() => setOpen(false)}
+            className={`mobile-bottom-tab ${isNavActive('/production') ? 'active' : ''}`}
+            aria-label="Production"
+          >
+            <Factory />
+            <span>Production</span>
+            {activeRunsCount > 0 && (
+              <span className="mobile-tab-badge">{activeRunsCount > 99 ? '99+' : activeRunsCount}</span>
+            )}
+          </Link>
+
+          <Link
+            to="/dispatch"
+            onClick={() => setOpen(false)}
+            className={`mobile-bottom-tab ${isNavActive('/dispatch') ? 'active' : ''}`}
+            aria-label="Dispatch"
+          >
+            <Truck />
+            <span>Dispatch</span>
+          </Link>
+
+          <button
+            type="button"
+            className={`mobile-bottom-tab ${open ? 'active' : ''}`}
+            onClick={() => setOpen(prev => !prev)}
+            aria-label="More navigation options"
+          >
+            <MoreHorizontal />
+            <span>More</span>
+          </button>
+        </nav>
       </div>
 
       {/* Slide-over My Profile Sheet */}

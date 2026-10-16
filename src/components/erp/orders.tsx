@@ -865,6 +865,7 @@ export function Orders(){
                       Quantity (Boxes)
                       <input
                         type="number"
+                        inputMode="numeric"
                         min={1}
                         required
                         value={l.ordered_qty}
@@ -875,6 +876,7 @@ export function Orders(){
                       Unit Rate (₹)
                       <input
                         type="number"
+                        inputMode="decimal"
                         min={0}
                         step=".01"
                         required={!stock}

@@ -528,7 +528,7 @@ export function Reports() {
           </div>
 
           {/* Realised DC Profit Table */}
-          <div className="desktop-table-view table-wrap">
+          <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -601,7 +601,7 @@ export function Reports() {
 
       {/* TAB 2: ORDER ENTRY & PENDING ORDERS */}
       {tab === 'orders' && (
-        <div className="desktop-table-view table-wrap">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -645,7 +645,7 @@ export function Reports() {
 
       {/* TAB 3: PRODUCTION BACKLOG & COMPLETED PRODUCTION */}
       {tab === 'production' && (
-        <div className="desktop-table-view table-wrap">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -692,7 +692,7 @@ export function Reports() {
 
       {/* TAB 4: LABOUR PRODUCTIVITY REPORT */}
       {tab === 'labour' && (
-        <div className="desktop-table-view table-wrap">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -734,7 +734,7 @@ export function Reports() {
 
       {/* TAB 5: DISPATCH & DELIVERY CHALLANS */}
       {tab === 'dispatch' && (
-        <div className="desktop-table-view table-wrap">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -779,7 +779,7 @@ export function Reports() {
         <div className="space-y-8">
           <div>
             <h3 className="text-sm font-semibold mb-3">Company-Wise Quantity Distribution</h3>
-            <div className="desktop-table-view table-wrap">
+            <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -807,7 +807,7 @@ export function Reports() {
 
           <div>
             <h3 className="text-sm font-semibold mb-3">Box Type & Item-Wise Quantity Distribution</h3>
-            <div className="desktop-table-view table-wrap">
+            <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
@@ -839,7 +839,7 @@ export function Reports() {
 
       {/* TAB 7: PAYROLL & BORROWINGS LEDGER */}
       {tab === 'payroll_borrowings' && (
-        <div className="desktop-table-view table-wrap">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
@@ -875,7 +875,7 @@ export function Reports() {
 
       {/* TAB 8: TRANSPORTATION & OPERATIONAL EXPENSES */}
       {tab === 'expenses' && (
-        <div className="desktop-table-view table-wrap">
+        <div className="table-wrap">
           <table>
             <thead>
               <tr>
