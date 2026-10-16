@@ -1,13 +1,14 @@
 import {createServerFn} from '@tanstack/react-start';
 import {requireSupabaseAuth} from '@/integrations/supabase/auth-middleware';
 
-export type AppRole = 'admin' | 'manager' | 'supervisor' | 'accountant' | 'dispatch_clerk' | 'viewer' | 'pending';
+export type AppRole = 'admin' | 'manager' | 'supervisor' | 'accountant' | 'dispatch_clerk' | 'viewer' | 'user' | 'pending';
 
 export interface AdminUserRecord {
   id: string;
   email: string;
   created_at: string;
   role: AppRole;
+  allowed_pages?: string[] | null;
   last_sign_in_at?: string | null;
   display_name?: string | null;
   full_name?: string | null;
@@ -17,6 +18,7 @@ export interface AdminUserRecord {
 
 const VALID_ROLES = new Set<AppRole>([
   'admin',
+  'user',
   'manager',
   'supervisor',
   'accountant',
@@ -61,10 +63,13 @@ export const adminListUsers = createServerFn({method: 'POST'})
         console.warn('Could not list roles from user_roles:', rolesError.message);
       }
 
-      const rolesMap = new Map<string, AppRole>();
+      const rolesMap = new Map<string, { role: AppRole; allowed_pages?: string[] | null }>();
       for (const r of rolesData ?? []) {
         if (VALID_ROLES.has(r.role as AppRole)) {
-          rolesMap.set(r.user_id, r.role as AppRole);
+          rolesMap.set(r.user_id, {
+            role: r.role as AppRole,
+            allowed_pages: r.allowed_pages ?? null,
+          });
         }
       }
 
@@ -83,9 +88,9 @@ export const adminListUsers = createServerFn({method: 'POST'})
       // First add from auth.admin.listUsers
       for (const u of authData?.users ?? []) {
         const profile = profilesMap.get(u.id);
-        const assignedRole = rolesMap.get(u.id);
+        const roleInfo = rolesMap.get(u.id);
         const metadataRole = u.user_metadata?.['role'] as AppRole | undefined;
-        const roleCandidate = assignedRole || metadataRole || 'pending';
+        const roleCandidate = roleInfo?.role || metadataRole || 'pending';
         const role = VALID_ROLES.has(roleCandidate as AppRole) ? (roleCandidate as AppRole) : 'pending';
 
         userMap.set(u.id, {
@@ -98,13 +103,15 @@ export const adminListUsers = createServerFn({method: 'POST'})
           phone: profile?.phone || null,
           department: profile?.department || null,
           role,
+          allowed_pages: roleInfo?.allowed_pages ?? null,
         });
       }
 
       // Also merge any profiles from profiles table that might not be in auth page (or if auth listing was partial)
       for (const p of profilesData ?? []) {
         if (!userMap.has(p.id)) {
-          const assignedRole = rolesMap.get(p.id) || 'pending';
+          const roleInfo = rolesMap.get(p.id);
+          const assignedRole = roleInfo?.role || 'pending';
           const role = VALID_ROLES.has(assignedRole as AppRole) ? (assignedRole as AppRole) : 'pending';
           userMap.set(p.id, {
             id: p.id,
@@ -116,6 +123,7 @@ export const adminListUsers = createServerFn({method: 'POST'})
             phone: p.phone || null,
             department: p.department || null,
             role,
+            allowed_pages: roleInfo?.allowed_pages ?? null,
           });
         }
       }
@@ -130,8 +138,8 @@ export const adminListUsers = createServerFn({method: 'POST'})
 
 export const adminHandoverRole = createServerFn({method: 'POST'})
   .middleware([requireSupabaseAuth])
-  .validator((input: {targetUserId: string; role: AppRole}) => input)
-  .handler(async ({data: {targetUserId, role}, context}) => {
+  .validator((input: {targetUserId: string; role: AppRole; allowedPages?: string[]}) => input)
+  .handler(async ({data: {targetUserId, role, allowedPages}, context}) => {
     try {
       const {supabaseAdmin} = await import('@/integrations/supabase/client.server');
 
@@ -153,7 +161,7 @@ export const adminHandoverRole = createServerFn({method: 'POST'})
       // 2. Fetch old role for audit logging
       const {data: oldRoleRow} = await supabaseAdmin
         .from('user_roles')
-        .select('role')
+        .select('role, allowed_pages')
         .eq('user_id', targetUserId)
         .maybeSingle();
 
@@ -172,10 +180,18 @@ export const adminHandoverRole = createServerFn({method: 'POST'})
       }
 
       // 4. Update user_roles
+      const updatePayload: Record<string, any> = {
+        user_id: targetUserId,
+        role,
+      };
+      if (allowedPages !== undefined) {
+        updatePayload['allowed_pages'] = allowedPages;
+      }
+
       const {error: roleError} = await supabaseAdmin
         .from('user_roles')
         .upsert(
-          {user_id: targetUserId, role},
+          updatePayload,
           {onConflict: 'user_id'}
         );
 
@@ -191,7 +207,7 @@ export const adminHandoverRole = createServerFn({method: 'POST'})
           record_id: targetUserId,
           action: 'UPDATE',
           old_data: {role: oldRole},
-          new_data: {role},
+          new_data: {role, allowed_pages: allowedPages},
           changed_fields: {role: {old: oldRole, new: role}},
           user_id: context.userId
         });
@@ -202,7 +218,7 @@ export const adminHandoverRole = createServerFn({method: 'POST'})
       // 6. Synchronize user metadata
       try {
         await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
-          user_metadata: {role},
+          user_metadata: {role, allowed_pages: allowedPages},
         });
       } catch (updateErr) {
         console.warn('Could not update user metadata:', updateErr);
@@ -219,6 +235,52 @@ export const adminHandoverRole = createServerFn({method: 'POST'})
     } catch (err: unknown) {
       console.error('adminHandoverRole error:', err);
       throw new Error(err instanceof Error ? err.message : 'Could not handover role');
+    }
+  });
+
+export const adminUpdateUserPageAccess = createServerFn({method: 'POST'})
+  .middleware([requireSupabaseAuth])
+  .validator((input: {targetUserId: string; allowedPages: string[]}) => input)
+  .handler(async ({data: {targetUserId, allowedPages}, context}) => {
+    try {
+      const {supabaseAdmin} = await import('@/integrations/supabase/client.server');
+
+      // Verify caller is admin
+      const {data: callerRole} = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', context.userId)
+        .maybeSingle();
+
+      if (callerRole?.role !== 'admin') {
+        throw new Error('Only administrators can update page permissions');
+      }
+
+      const {error} = await supabaseAdmin
+        .from('user_roles')
+        .update({allowed_pages: allowedPages})
+        .eq('user_id', targetUserId);
+
+      if (error) throw error;
+
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+          user_metadata: { allowed_pages: allowedPages }
+        });
+      } catch (metaErr) {
+        console.warn('Could not sync user_metadata allowed_pages:', metaErr);
+      }
+
+      try {
+        await supabaseAdmin.from('factory_data_pings').insert({
+          change_source: `page_access:${targetUserId}`
+        });
+      } catch {}
+
+      return {success: true, targetUserId, allowedPages};
+    } catch (err: unknown) {
+      console.error('adminUpdateUserPageAccess error:', err);
+      throw new Error(err instanceof Error ? err.message : 'Could not update page access');
     }
   });
 

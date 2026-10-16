@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
-import {useFactory} from './provider';
+import {useFactory, ALL_PAGE_KEYS, DEFAULT_ROLE_PAGES} from './provider';
 import {Heading,AccessNotice,Empty,Pill,SearchFilter,Pagination} from './common';
 import {supabase} from '@/integrations/supabase/client';
 import {enablePush,disablePush} from '@/lib/push';
@@ -357,7 +357,7 @@ export function Profile(){
 }
 
 export function Admin(){
-  const {data:d,user,isAdmin,handoverRole,revokeRole,refresh}=useFactory();
+  const {data:d,user,isAdmin,handoverRole,updateUserPageAccess,revokeRole,refresh}=useFactory();
   const [users,setUsers]=useState<AdminUserRecord[]>([]);
   const [loading,setLoading]=useState(false);
   const [search,setSearch]=useState('');
@@ -365,7 +365,8 @@ export function Admin(){
   const [handoverModalOpen,setHandoverModalOpen]=useState(false);
   const [targetUser,setTargetUser]=useState<AdminUserRecord|null>(null);
   const [targetIdOrEmail,setTargetIdOrEmail]=useState('');
-  const [selectedRole,setSelectedRole]=useState<import('./provider').AppRole>('supervisor');
+  const [selectedRole,setSelectedRole]=useState<import('./provider').AppRole>('user');
+  const [selectedAllowedPages,setSelectedAllowedPages]=useState<string[]>([...DEFAULT_ROLE_PAGES.user]);
   const [busy,setBusy]=useState(false);
   const [page,setPage]=useState(1);
   const pageSize=10;
@@ -401,13 +402,16 @@ export function Admin(){
 
   // 2. Add any users from d.profiles
   for(const p of d.profiles){
-    const assignedRole=(d.roles.find(r=>r.user_id===p.id)?.role as import('./provider').AppRole) || 'pending';
+    const roleRow=d.roles.find(r=>r.user_id===p.id);
+    const assignedRole=(roleRow?.role as import('./provider').AppRole) || 'pending';
+    const allowedPages=roleRow?.allowed_pages || DEFAULT_ROLE_PAGES[assignedRole];
     if(!allUsersMap.has(p.id)){
       allUsersMap.set(p.id,{
         id:p.id,
         email:p.email,
         created_at:p.created_at,
         role:assignedRole,
+        allowed_pages:allowedPages,
         display_name:p.display_name||p.full_name||p.email.split('@')[0]||null,
         full_name:p.full_name||null,
         phone:p.phone||null,
@@ -419,6 +423,7 @@ export function Admin(){
       if(p.full_name) existing.full_name=p.full_name;
       if(p.phone) existing.phone=p.phone;
       if(p.department) existing.department=p.department;
+      if(!existing.allowed_pages && allowedPages) existing.allowed_pages=allowedPages;
     }
   }
 
@@ -430,11 +435,13 @@ export function Admin(){
         email:r.user_id===user?.id?user.email||'Current Admin':'member@slbw.local',
         created_at:new Date().toISOString(),
         role:(r.role as import('./provider').AppRole) || 'pending',
+        allowed_pages:r.allowed_pages || DEFAULT_ROLE_PAGES[(r.role as import('./provider').AppRole) || 'pending'],
         display_name:r.user_id===user?.id?'You (Admin)':'Team Member'
       });
     } else {
       const existing=allUsersMap.get(r.user_id)!;
       existing.role=(r.role as import('./provider').AppRole) || 'pending';
+      if(r.allowed_pages) existing.allowed_pages=r.allowed_pages;
     }
   }
 
@@ -445,6 +452,7 @@ export function Admin(){
       email:user.email||'admin@slbw.local',
       created_at:user.created_at,
       role:isAdmin?'admin':'viewer',
+      allowed_pages:isAdmin?DEFAULT_ROLE_PAGES.admin:DEFAULT_ROLE_PAGES.viewer,
       display_name:user.user_metadata?.['display_name']||'You'
     });
   }
@@ -465,19 +473,38 @@ export function Admin(){
 
   const pendingCount=userList.filter(u=>u.role==='pending').length;
   const adminCount=userList.filter(u=>u.role==='admin').length;
+  const standardUserCount=userList.filter(u=>u.role==='user').length;
   const userCount=userList.filter(u=>u.role!=='pending'&&u.role!=='admin').length;
 
   const handleOpenHandover=(record?:AdminUserRecord)=>{
     if(record){
       setTargetUser(record);
       setTargetIdOrEmail(record.email||record.id);
-      setSelectedRole(record.role==='pending'?'manager':record.role);
+      const targetRole=record.role==='pending'?'user':record.role;
+      setSelectedRole(targetRole);
+      setSelectedAllowedPages(
+        record.allowed_pages && record.allowed_pages.length > 0
+          ? [...record.allowed_pages]
+          : [...(DEFAULT_ROLE_PAGES[targetRole] || [])]
+      );
     } else {
       setTargetUser(null);
       setTargetIdOrEmail('');
-      setSelectedRole('manager');
+      setSelectedRole('user');
+      setSelectedAllowedPages([...DEFAULT_ROLE_PAGES.user]);
     }
     setHandoverModalOpen(true);
+  };
+
+  const handleSelectRoleInModal=(role:import('./provider').AppRole)=>{
+    setSelectedRole(role);
+    setSelectedAllowedPages([...(DEFAULT_ROLE_PAGES[role] || [])]);
+  };
+
+  const handleTogglePage=(pageKey:string)=>{
+    setSelectedAllowedPages(prev=>
+      prev.includes(pageKey)?prev.filter(p=>p!==pageKey):[...prev,pageKey]
+    );
   };
 
   const handleExecuteHandover=async(e:FormEvent)=>{
@@ -490,18 +517,22 @@ export function Admin(){
       return;
     }
 
-    const ok=await handoverRole(idToUse,selectedRole);
-    setBusy(false);
+    const ok=await handoverRole(idToUse,selectedRole,selectedAllowedPages);
     if(ok){
+      await updateUserPageAccess(idToUse,selectedAllowedPages);
       setHandoverModalOpen(false);
       setTargetUser(null);
       setTargetIdOrEmail('');
       await loadUsers();
     }
+    setBusy(false);
   };
 
   const handleQuickHandover=async(record:AdminUserRecord,role:import('./provider').AppRole)=>{
-    const ok=await handoverRole(record.id,role);
+    const pages=record.allowed_pages && record.allowed_pages.length > 0
+      ? record.allowed_pages
+      : (DEFAULT_ROLE_PAGES[role] || []);
+    const ok=await handoverRole(record.id,role,pages);
     if(ok)await loadUsers();
   };
 
@@ -599,13 +630,9 @@ export function Admin(){
       <div className="crm-tabs" role="tablist">
         {[
           {id:'All',label:'All Accounts',count:userList.length},
-          {id:'pending',label:'Pending',count:pendingCount},
-          {id:'admin',label:'Admin',count:adminCount},
-          {id:'manager',label:'Manager',count:userList.filter(u=>u.role==='manager').length},
-          {id:'supervisor',label:'Supervisor',count:userList.filter(u=>u.role==='supervisor').length},
-          {id:'accountant',label:'Accountant',count:userList.filter(u=>u.role==='accountant').length},
-          {id:'dispatch_clerk',label:'Dispatch',count:userList.filter(u=>u.role==='dispatch_clerk').length},
-          {id:'viewer',label:'Viewer',count:userList.filter(u=>u.role==='viewer').length},
+          {id:'pending',label:'Pending Verification',count:pendingCount},
+          {id:'user',label:'Users',count:standardUserCount},
+          {id:'admin',label:'Administrators',count:adminCount},
         ].map(t=>(
           <button
             key={t.id}
@@ -616,7 +643,7 @@ export function Admin(){
             onClick={()=>setFilterRole(t.id)}
           >
             <span>{t.label}</span>
-            <span className="crm-tab-count">{t.count}</span>
+            <span className={`crm-tab-count ${t.id === 'pending' && pendingCount > 0 ? '!bg-amber-500 !text-black font-semibold' : ''}`}>{t.count}</span>
           </button>
         ))}
       </div>
@@ -637,7 +664,7 @@ export function Admin(){
               <th>Account / User</th>
               <th>User ID</th>
               <th>Assigned Role</th>
-              <th>Status</th>
+              <th>Status & Access</th>
               <th className="text-right">Role Handover Action</th>
             </tr>
           </thead>
@@ -646,6 +673,10 @@ export function Admin(){
               const isCurrentUser=u.id===user?.id;
               const isPending=u.role==='pending';
               const monogram=(u.display_name||u.email).slice(0,2).toUpperCase();
+              const pageCount = u.role === 'admin' 
+                ? ALL_PAGE_KEYS.length 
+                : (u.allowed_pages && u.allowed_pages.length > 0 ? u.allowed_pages.length : (DEFAULT_ROLE_PAGES[u.role] || []).length);
+
               return (
                 <tr key={u.id}>
                   <td>
@@ -671,6 +702,10 @@ export function Admin(){
                     {u.role==='admin' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
                         <ShieldCheck className="w-3 h-3"/> Administrator
+                      </span>
+                    ) : u.role==='user' ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                        <UserCheck className="w-3 h-3"/> User
                       </span>
                     ) : u.role==='manager' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
@@ -702,7 +737,12 @@ export function Admin(){
                     {isPending ? (
                       <span className="text-xs text-amber-500 font-medium">Awaiting Handover</span>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Verified & Active</span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs text-muted-foreground">Active</span>
+                        <span className="text-[11px] text-muted-foreground/80 font-mono">
+                          {u.role === 'admin' ? 'All pages (Full)' : `${pageCount} page${pageCount === 1 ? '' : 's'} allowed`}
+                        </span>
+                      </div>
                     )}
                   </td>
                   <td className="text-right">
@@ -711,20 +751,11 @@ export function Admin(){
                         <>
                           <Button
                             size="sm"
-                            className="rounded-full shadow-none text-xs h-7 px-3 bg-primary text-primary-foreground hover:bg-primary/90 border-0"
+                            className="rounded-full shadow-none text-xs h-7 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-medium border-0"
                             style={{boxShadow:'none'}}
-                            onClick={()=>handleOpenHandover(u)}
+                            onClick={()=>handleQuickHandover(u,'user')}
                           >
-                            <UserCheck className="w-3 h-3 mr-1"/> Assign Role
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="rounded-full shadow-none text-xs h-7 px-2.5"
-                            style={{boxShadow:'none'}}
-                            onClick={()=>handleQuickHandover(u,'manager')}
-                          >
-                            Manager
+                            <CheckCircle2 className="w-3 h-3 mr-1"/> Approve User
                           </Button>
                           <Button
                             size="sm"
@@ -733,30 +764,64 @@ export function Admin(){
                             style={{boxShadow:'none'}}
                             onClick={()=>handleQuickHandover(u,'admin')}
                           >
-                            Admin
+                            <ShieldCheck className="w-3 h-3 mr-1 text-primary"/> Approve Admin
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="rounded-full shadow-none text-xs h-7 px-2 text-muted-foreground hover:text-foreground"
+                            style={{boxShadow:'none'}}
+                            onClick={()=>handleOpenHandover(u)}
+                            title="Configure detailed page access"
+                          >
+                            Custom…
                           </Button>
                         </>
                       ) : isCurrentUser ? (
                         <span className="text-xs text-muted-foreground italic pr-2">Current Active Admin</span>
                       ) : (
                         <>
+                          {u.role === 'user' ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full shadow-none text-xs h-7 px-2.5"
+                              style={{boxShadow:'none'}}
+                              onClick={()=>handleQuickHandover(u,'admin')}
+                              title="Promote to administrator"
+                            >
+                              <ShieldCheck className="w-3 h-3 mr-1 text-primary"/> Make Admin
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full shadow-none text-xs h-7 px-2.5"
+                              style={{boxShadow:'none'}}
+                              onClick={()=>handleQuickHandover(u,'user')}
+                              title="Demote to standard user"
+                            >
+                              <UserCheck className="w-3 h-3 mr-1"/> Set as User
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
-                            className="rounded-full shadow-none text-xs h-7 px-3"
+                            className="rounded-full shadow-none text-xs h-7 px-2.5"
                             style={{boxShadow:'none'}}
                             onClick={()=>handleOpenHandover(u)}
+                            title="Configure specific pages"
                           >
                             <ArrowRightLeft className="w-3 h-3 mr-1"/>
-                            Change Role
+                            Access
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="rounded-full shadow-none text-xs h-7 px-2.5 text-destructive hover:bg-destructive/10"
+                            className="rounded-full shadow-none text-xs h-7 px-2 text-destructive hover:bg-destructive/10"
                             style={{boxShadow:'none'}}
                             onClick={()=>handleRevoke(u)}
-                            title="Revoke access and set back to pending verification"
+                            title="Revoke access (return to pending verification)"
                           >
                             <UserX className="w-3 h-3"/>
                           </Button>
@@ -779,6 +844,10 @@ export function Admin(){
           const isCurrentUser=u.id===user?.id;
           const isPending=u.role==='pending';
           const monogram=(u.display_name||u.email).slice(0,2).toUpperCase();
+          const pageCount = u.role === 'admin' 
+            ? ALL_PAGE_KEYS.length 
+            : (u.allowed_pages && u.allowed_pages.length > 0 ? u.allowed_pages.length : (DEFAULT_ROLE_PAGES[u.role] || []).length);
+
           return (
             <div key={u.id} className="mobile-record-card">
               <div className="mobile-card-top">
@@ -801,6 +870,10 @@ export function Admin(){
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-primary/10 text-primary border border-primary/20">
                     Admin
                   </span>
+                ) : u.role==='user' ? (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    User
+                  </span>
                 ) : u.role!=='pending' ? (
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-secondary text-foreground border border-border capitalize">
                     {u.role.replace('_', ' ')}
@@ -820,6 +893,12 @@ export function Admin(){
                   </span>
                 </div>
                 <div className="mobile-card-field">
+                  <span className="mobile-card-label">Allowed Pages</span>
+                  <span className="mobile-card-value text-[11px]">
+                    {u.role === 'admin' ? 'All Pages' : `${pageCount} Pages`}
+                  </span>
+                </div>
+                <div className="mobile-card-field">
                   <span className="mobile-card-label">Verification Status</span>
                   <span className={`mobile-card-value ${isPending?'text-amber-500 font-medium':'text-muted-foreground'}`}>
                     {isPending?'Awaiting Handover':'Active & Approved'}
@@ -829,14 +908,14 @@ export function Admin(){
 
               <div className="mobile-card-actions pt-2">
                 {isPending ? (
-                  <div className="flex gap-2 w-full">
+                  <div className="flex flex-wrap gap-1.5 w-full">
                     <Button
                       size="sm"
-                      className="flex-1 rounded-full shadow-none text-xs bg-primary text-primary-foreground"
+                      className="flex-1 rounded-full shadow-none text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
                       style={{boxShadow:'none'}}
-                      onClick={()=>handleOpenHandover(u)}
+                      onClick={()=>handleQuickHandover(u,'user')}
                     >
-                      <UserCheck className="w-3.5 h-3.5 mr-1"/> Assign Role
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1"/> Approve User
                     </Button>
                     <Button
                       size="sm"
@@ -845,27 +924,56 @@ export function Admin(){
                       style={{boxShadow:'none'}}
                       onClick={()=>handleQuickHandover(u,'admin')}
                     >
-                      Make Admin
+                      <ShieldCheck className="w-3.5 h-3.5 mr-1 text-primary"/> Approve Admin
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="rounded-full shadow-none text-xs px-2 text-muted-foreground"
+                      style={{boxShadow:'none'}}
+                      onClick={()=>handleOpenHandover(u)}
+                    >
+                      Custom…
                     </Button>
                   </div>
                 ) : isCurrentUser ? (
                   <span className="text-xs text-muted-foreground italic w-full text-center">Current Active Admin</span>
                 ) : (
                   <div className="flex gap-2 w-full">
+                    {u.role === 'user' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 rounded-full shadow-none text-xs"
+                        style={{boxShadow:'none'}}
+                        onClick={()=>handleQuickHandover(u,'admin')}
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 mr-1 text-primary"/> Make Admin
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 rounded-full shadow-none text-xs"
+                        style={{boxShadow:'none'}}
+                        onClick={()=>handleQuickHandover(u,'user')}
+                      >
+                        <UserCheck className="w-3.5 h-3.5 mr-1"/> Set as User
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"
-                      className="flex-1 rounded-full shadow-none text-xs"
+                      className="rounded-full shadow-none text-xs"
                       style={{boxShadow:'none'}}
                       onClick={()=>handleOpenHandover(u)}
                     >
-                      <ArrowRightLeft className="w-3.5 h-3.5 mr-1"/>
-                      Change Role
+                      Access
                     </Button>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="rounded-full shadow-none text-xs text-destructive"
+                      className="rounded-full shadow-none text-xs text-destructive hover:bg-destructive/10"
                       style={{boxShadow:'none'}}
                       onClick={()=>handleRevoke(u)}
                     >
@@ -888,12 +996,12 @@ export function Admin(){
         onPageChange={setPage}
       />
 
-      {/* Role Handover Modal */}
+      {/* Role Handover & Tenant Access Modal */}
       <Dialog open={handoverModalOpen} onOpenChange={setHandoverModalOpen}>
-        <DialogContent className="modal-wide !max-w-md" aria-describedby={undefined}>
-          <DialogTitle className="text-lg font-medium">Handover Workspace Role</DialogTitle>
+        <DialogContent className="modal-wide !max-w-lg" aria-describedby={undefined}>
+          <DialogTitle className="text-lg font-medium">User Role & Workspace Access</DialogTitle>
           <div className="form-subtitle">
-            Assign an operational or administrator role to verify the newly signed up user.
+            Assign role and govern workspace permissions for this account.
           </div>
 
           <form onSubmit={handleExecuteHandover} className="space-y-4 pt-2">
@@ -910,27 +1018,23 @@ export function Admin(){
                 style={{boxShadow:'none'}}
               />
               <span className="text-[11px] text-muted-foreground mt-1 block">
-                Paste the user's registered email or User ID from their Pending Verification page.
+                Assigning role "User" or "Admin" will immediately approve their account and unlock the dashboard.
               </span>
             </div>
 
             <div>
               <label className="text-xs font-medium text-foreground block mb-1.5">
-                Role to Handover
+                Role to Assign
               </label>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: 'admin', title: 'Administrator', desc: 'Full owner authority, user governance & financials.' },
-                  { id: 'manager', title: 'Manager', desc: 'Operations & logistics management, cancel challans.' },
-                  { id: 'supervisor', title: 'Supervisor', desc: 'Shop-floor labour assignment & completions.' },
-                  { id: 'accountant', title: 'Accountant', desc: 'Invoicing, expenses, borrowings & payroll payments.' },
-                  { id: 'dispatch_clerk', title: 'Dispatch Clerk', desc: 'Drafting & confirming delivery challans, LR entry.' },
-                  { id: 'viewer', title: 'Viewer', desc: 'Read-only operational counts, zero money access.' },
+                  { id: 'user', title: 'User (Standard Workspace)', desc: 'Approved user with access to Dashboard & software operations (Orders, Production, Dispatch, Masters, Labour, Expenses & Reports).' },
+                  { id: 'admin', title: 'Administrator', desc: 'Full factory authority, user approvals, role governance & all modules.' },
                 ].map(r => (
                   <button
                     key={r.id}
                     type="button"
-                    onClick={() => setSelectedRole(r.id as import('./provider').AppRole)}
+                    onClick={() => handleSelectRoleInModal(r.id as import('./provider').AppRole)}
                     className={`p-2.5 rounded-lg border text-left flex flex-col gap-1 transition-all ${
                       selectedRole === r.id
                         ? 'border-primary bg-primary/5 text-foreground'
@@ -950,6 +1054,70 @@ export function Admin(){
               </div>
             </div>
 
+            {/* Tenant Page Visibility Selector */}
+            <div className="border border-border/80 rounded-xl p-3 bg-muted/20 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-foreground">Tenant Page Access & Visibility</div>
+                  <div className="text-[11px] text-muted-foreground">Control which pages and modules are visible to this account.</div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={()=>setSelectedAllowedPages(ALL_PAGE_KEYS.map(p=>p.key))}
+                    className="text-[10px] px-2 py-0.5 rounded bg-secondary text-foreground hover:bg-secondary/80"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={()=>setSelectedAllowedPages(['orders', 'production', 'dispatch'])}
+                    className="text-[10px] px-2 py-0.5 rounded bg-secondary text-foreground hover:bg-secondary/80"
+                  >
+                    Ops Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={()=>setSelectedAllowedPages(['orders'])}
+                    className="text-[10px] px-2 py-0.5 rounded bg-secondary text-foreground hover:bg-secondary/80"
+                  >
+                    Minimal
+                  </button>
+                </div>
+              </div>
+
+              {selectedRole === 'admin' ? (
+                <div className="text-[11px] text-primary/90 bg-primary/10 p-2 rounded-lg border border-primary/20">
+                  <ShieldCheck className="w-3.5 h-3.5 inline mr-1 text-primary"/>
+                  Administrators automatically have unrestricted access to all pages and settings.
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                  {ALL_PAGE_KEYS.map(pageItem => {
+                    const isChecked = selectedAllowedPages.includes(pageItem.key);
+                    return (
+                      <label
+                        key={pageItem.key}
+                        className={`flex items-center gap-2 p-1.5 rounded-lg border text-xs cursor-pointer select-none transition-colors ${
+                          isChecked
+                            ? 'border-primary/50 bg-primary/10 text-foreground font-medium'
+                            : 'border-border/60 bg-card text-muted-foreground hover:bg-muted/40'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-3.5 rounded border-border text-primary focus:ring-0"
+                          checked={isChecked}
+                          onChange={() => handleTogglePage(pageItem.key)}
+                        />
+                        <span className="truncate">{pageItem.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
               <Button
                 type="button"
@@ -966,7 +1134,7 @@ export function Admin(){
                 className="rounded-full shadow-none text-xs bg-primary text-primary-foreground hover:bg-primary/90"
                 style={{boxShadow:'none'}}
               >
-                {busy?'Saving…':'Confirm Role Handover'}
+                {busy?'Saving…':'Save User Role & Permissions'}
               </Button>
             </div>
           </form>

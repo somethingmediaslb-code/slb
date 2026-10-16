@@ -19,6 +19,7 @@ import { Route as LabourRouteImport } from './routes/labour'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as PartiesRouteImport } from './routes/parties'
+import { Route as PermissionsRouteImport } from './routes/permissions'
 import { Route as ProductionRouteImport } from './routes/production'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as ReportsRouteImport } from './routes/reports'
@@ -75,6 +76,11 @@ const PartiesRoute = PartiesRouteImport.update({
   path: '/parties',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PermissionsRoute = PermissionsRouteImport.update({
+  id: '/permissions',
+  path: '/permissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductionRoute = ProductionRouteImport.update({
   id: '/production',
   path: '/production',
@@ -112,6 +118,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/parties': typeof PartiesRoute
+  '/permissions': typeof PermissionsRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
   '/reports': typeof ReportsRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/parties': typeof PartiesRoute
+  '/permissions': typeof PermissionsRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
   '/reports': typeof ReportsRoute
@@ -147,6 +155,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/orders': typeof OrdersRoute
   '/parties': typeof PartiesRoute
+  '/permissions': typeof PermissionsRoute
   '/production': typeof ProductionRoute
   '/profile': typeof ProfileRoute
   '/reports': typeof ReportsRoute
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/orders'
     | '/parties'
+    | '/permissions'
     | '/production'
     | '/profile'
     | '/reports'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/orders'
     | '/parties'
+    | '/permissions'
     | '/production'
     | '/profile'
     | '/reports'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/orders'
     | '/parties'
+    | '/permissions'
     | '/production'
     | '/profile'
     | '/reports'
@@ -218,6 +230,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OrdersRoute: typeof OrdersRoute
   PartiesRoute: typeof PartiesRoute
+  PermissionsRoute: typeof PermissionsRoute
   ProductionRoute: typeof ProductionRoute
   ProfileRoute: typeof ProfileRoute
   ReportsRoute: typeof ReportsRoute
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PartiesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/permissions': {
+      id: '/permissions'
+      path: '/permissions'
+      fullPath: '/permissions'
+      preLoaderRoute: typeof PermissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/production': {
       id: '/production'
       path: '/production'
@@ -346,6 +366,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OrdersRoute: OrdersRoute,
   PartiesRoute: PartiesRoute,
+  PermissionsRoute: PermissionsRoute,
   ProductionRoute: ProductionRoute,
   ProfileRoute: ProfileRoute,
   ReportsRoute: ReportsRoute,

@@ -23,13 +23,24 @@ export function Heading({
   );
 }
 
-export function Empty({columns,label='No records yet'}:{columns:number;label?:string}){
+export function Empty({columns,label='No records yet',asBlock}:{columns?:number;label?:string;asBlock?:boolean}){
   const {loading,error}=useFactory();
+  const text = loading ? 'Loading records…' : error ? 'Records could not be loaded. Please try again.' : label;
+  
+  if (asBlock || columns === 1) {
+    return (
+      <div className="empty-cell py-8 text-center flex flex-col items-center justify-center gap-2 text-muted-foreground">
+        <PackageOpen className="size-6 text-muted-foreground/60"/>
+        <span className="text-xs">{text}</span>
+      </div>
+    );
+  }
+
   return (
     <tr>
-      <td colSpan={columns} className="empty-cell">
+      <td colSpan={columns || 1} className="empty-cell">
         <PackageOpen/>
-        {loading?'Loading records…':error?'Records could not be loaded. Please try again.':label}
+        {text}
       </td>
     </tr>
   );

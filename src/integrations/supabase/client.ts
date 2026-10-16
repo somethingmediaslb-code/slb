@@ -50,12 +50,11 @@ function createSupabaseClient() {
   const SUPABASE_URL =
     import.meta.env['VITE_SUPABASE_URL'] ||
     (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'] : undefined) ||
-    'https://noiuvevcvxlxqmrkqjpn.supabase.co';
+    'https://hfnejjmvmvkphdqzohfl.supabase.co';
 
   const SUPABASE_PUBLISHABLE_KEY =
     import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
-    (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || process.env['SUPABASE_PUBLISHABLE_KEY'] : undefined) ||
-    'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy';
+    (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || process.env['SUPABASE_PUBLISHABLE_KEY'] : undefined);
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [

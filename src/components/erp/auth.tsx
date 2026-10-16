@@ -2,8 +2,10 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { supabase } from '@/integrations/supabase/client';
 import { useFactory } from './provider';
-import { ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
 import { toast } from 'sonner';
+import { autoConfirmUser } from '@/lib/auth.functions';
+import { PendingVerificationPage } from './pending-verification';
 
 function GoogleIcon() {
   return (
@@ -32,16 +34,14 @@ export function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [resending, setResending] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [error, setError] = useState('');
-  const [showResend, setShowResend] = useState(false);
   const [showForgot, setShowForgot] = useState(false);
   const [infoNotice, setInfoNotice] = useState('');
   const navigate = useNavigate();
-  const { user } = useFactory();
+  const { user, isPendingVerification } = useFactory();
 
-  // Detect URL auth errors (e.g., expired confirmation links or OAuth errors)
+  // Detect URL auth errors (e.g. OAuth errors)
   useState(() => {
     if (typeof window !== 'undefined') {
       const searchParams = new URLSearchParams(window.location.search);
@@ -50,7 +50,6 @@ export function LoginPage() {
       const errCode = searchParams.get('error_code') || hashParams.get('error_code');
       if (errDesc) {
         setError(decodeURIComponent(errDesc.replace(/\+/g, ' ')));
-        setShowResend(true);
       } else if (errCode) {
         setError(`Authentication error: ${errCode}`);
       }
@@ -62,10 +61,10 @@ export function LoginPage() {
     setError('');
     setInfoNotice('');
     try {
-      // Safe check: probe whether Google OAuth is enabled in Supabase backend
-      const authUrl = `https://noiuvevcvxlxqmrkqjpn.supabase.co/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
+      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://hfnejjmvmvkphdqzohfl.supabase.co';
+      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
       const probeRes = await fetch(authUrl, {
-        headers: { apikey: 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
+        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || '' },
       }).catch(() => null);
 
       if (probeRes && !probeRes.ok) {
@@ -95,12 +94,33 @@ export function LoginPage() {
     setBusy(true);
     setError('');
     setInfoNotice('');
-    setShowResend(false);
     try {
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+      let { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
+
+      // Auto-confirm if Supabase complained about unconfirmed email
+      if (signInError && (signInError.message.toLowerCase().includes('email not confirmed') || signInError.message.toLowerCase().includes('email_not_confirmed'))) {
+        try {
+          const confRes = await autoConfirmUser({ data: { email: email.trim() } });
+          if (confRes?.success) {
+            const retryRes = await supabase.auth.signInWithPassword({
+              email: email.trim(),
+              password,
+            });
+            if (!retryRes.error && retryRes.data?.user) {
+              signInData = retryRes.data;
+              signInError = null;
+            } else if (retryRes.error) {
+              signInError = retryRes.error;
+            }
+          }
+        } catch (e) {
+          console.warn('Auto-confirm attempt error:', e);
+        }
+      }
+
       if (signInError) throw signInError;
 
       // Ensure profile record exists in profiles table
@@ -125,46 +145,14 @@ export function LoginPage() {
       const msg = err instanceof Error ? err.message : 'Unable to sign in. Please verify your credentials.';
       const lower = msg.toLowerCase();
       if (lower.includes('invalid login credentials') || lower.includes('invalid_credentials')) {
-        setError('Invalid email or password. If you recently created your account, your email may still be unconfirmed.');
-        setShowResend(true);
-      } else if (lower.includes('email not confirmed')) {
-        setError('Your email is not verified yet. Please click the activation link in your email, or resend below.');
-        setShowResend(true);
+        setError('Invalid email or password. Please verify your credentials.');
+      } else if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed')) {
+        setError('Email not confirmed in Supabase. In Supabase Dashboard -> Authentication -> Providers -> Email, disable "Confirm email", or run: UPDATE auth.users SET email_confirmed_at = now() WHERE email = \'' + email.trim() + '\';');
       } else {
         setError(msg);
       }
     } finally {
       setBusy(false);
-    }
-  };
-
-  const handleResendEmail = async () => {
-    if (!email.trim()) {
-      toast.error('Please enter your email address first');
-      return;
-    }
-    setResending(true);
-    try {
-      const { error: resendErr } = await supabase.auth.resend({
-        type: 'signup',
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
-      if (resendErr) throw resendErr;
-      toast.success(`Verification email sent to ${email.trim()}!`);
-      setInfoNotice(`Verification email sent to ${email.trim()}. Please check your inbox and spam folder.`);
-      setError('');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not resend email';
-      if (msg.includes('rate_limit') || msg.includes('over_email_send_rate_limit')) {
-        toast.error('Supabase email limit reached. Please wait a few minutes or disable "Confirm email" in Supabase settings.');
-      } else {
-        toast.error(msg);
-      }
-    } finally {
-      setResending(false);
     }
   };
 
@@ -189,7 +177,11 @@ export function LoginPage() {
     }
   };
 
-  if (user) {
+  if (user && isPendingVerification) {
+    return <PendingVerificationPage />;
+  }
+
+  if (user && !isPendingVerification) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
         <div className="w-full max-w-[390px] p-8 rounded-3xl border border-border bg-card text-center space-y-5" style={{ boxShadow: 'none' }}>
@@ -294,20 +286,6 @@ export function LoginPage() {
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span className="leading-relaxed">{error}</span>
             </div>
-
-            {showResend && (
-              <div className="pt-1 flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={resending}
-                  onClick={handleResendEmail}
-                  className="px-3 py-1.5 rounded-full bg-destructive/15 hover:bg-destructive/25 text-destructive font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                  <span>Resend verification email</span>
-                </button>
-              </div>
-            )}
           </div>
         )}
 
@@ -389,22 +367,20 @@ export function SignupPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
-  const [resending, setResending] = useState(false);
   const [error, setError] = useState('');
-  const [successNotice, setSuccessNotice] = useState('');
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
+  const [signedUpPending, setSignedUpPending] = useState(false);
   const navigate = useNavigate();
-  const { user } = useFactory();
+  const { user, isPendingVerification } = useFactory();
 
   const handleGoogleSignUp = async () => {
     setBusy(true);
     setError('');
-    setSuccessNotice('');
     try {
-      // Safe check: probe whether Google OAuth is enabled in Supabase backend
-      const authUrl = `https://noiuvevcvxlxqmrkqjpn.supabase.co/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
+      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://hfnejjmvmvkphdqzohfl.supabase.co';
+      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
       const probeRes = await fetch(authUrl, {
-        headers: { apikey: 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
+        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || '' },
       }).catch(() => null);
 
       if (probeRes && !probeRes.ok) {
@@ -445,7 +421,6 @@ export function SignupPage() {
     }
     setBusy(true);
     setError('');
-    setSuccessNotice('');
     setAlreadyRegistered(false);
     try {
       const nameVal = fullName.trim();
@@ -455,7 +430,6 @@ export function SignupPage() {
         email: emailVal,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
           data: {
             full_name: nameVal,
             display_name: nameVal,
@@ -464,7 +438,22 @@ export function SignupPage() {
       });
       if (signUpError) throw signUpError;
 
-      // Upsert profile immediately if session or user was returned
+      // 1. If identities is empty, account already exists
+      if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        setError('An account with this email already exists. Please sign in instead.');
+        setAlreadyRegistered(true);
+        setBusy(false);
+        return;
+      }
+
+      // 2. Auto-confirm user immediately on server (no email link verification)
+      try {
+        await autoConfirmUser({ data: { ...(data?.user?.id ? { userId: data.user.id } : {}), email: emailVal, fullName: nameVal } });
+      } catch (confirmErr) {
+        console.warn('Auto confirm:', confirmErr);
+      }
+
+      // 3. Upsert profile record
       if (data?.user) {
         try {
           await supabase.from('profiles').upsert({
@@ -473,38 +462,25 @@ export function SignupPage() {
             full_name: nameVal,
             display_name: nameVal,
           }, { onConflict: 'id' });
-        } catch {
-          // Non-blocking: database trigger on auth.users will also insert
+        } catch {}
+      }
+
+      // 4. Ensure session is active immediately
+      if (!data?.session) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: emailVal,
+          password,
+        });
+        if (signInErr) {
+          toast.success('Account created! Awaiting administrator approval.');
+          setSignedUpPending(true);
+          return;
         }
       }
 
-      if (!data.session) {
-        // 1. If identities is empty, account already exists
-        if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
-          setError('An account with this email already exists. Please sign in instead.');
-          setAlreadyRegistered(true);
-        } else {
-          // 2. Attempt immediate sign-in (succeeds as soon as database auto-confirms or Supabase Confirm email is OFF)
-          try {
-            const { data: autoSignData } = await supabase.auth.signInWithPassword({
-              email: emailVal,
-              password,
-            });
-
-            if (autoSignData?.session) {
-              toast.success('Account created and signed in successfully!');
-              navigate({ to: '/' });
-              return;
-            }
-          } catch {}
-
-          setSuccessNotice(`Account created! To sign in immediately without waiting for emails, disable "Confirm email" in Supabase Dashboard (Authentication -> Providers -> Email) or run the 0007 migration.`);
-          toast.success('Account created! Please sign in.');
-        }
-      } else {
-        toast.success('Account created successfully');
-        navigate({ to: '/' });
-      }
+      toast.success('Account created successfully! Awaiting administrator approval.');
+      setSignedUpPending(true);
+      navigate({ to: '/' });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unable to create account';
       if (msg.toLowerCase().includes('weak') || msg.toLowerCase().includes('pwned') || msg.toLowerCase().includes('easy to guess')) {
@@ -517,28 +493,11 @@ export function SignupPage() {
     }
   };
 
-  const handleResendSignupEmail = async () => {
-    if (!email.trim()) return;
-    setResending(true);
-    try {
-      const { error: resendErr } = await supabase.auth.resend({
-        type: 'signup',
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-        },
-      });
-      if (resendErr) throw resendErr;
-      toast.success('Verification email resent! Check your inbox.');
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not resend email';
-      toast.error(msg);
-    } finally {
-      setResending(false);
-    }
-  };
+  if (signedUpPending || (user && isPendingVerification)) {
+    return <PendingVerificationPage />;
+  }
 
-  if (user) {
+  if (user && !isPendingVerification) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background text-foreground">
         <div className="w-full max-w-[390px] p-8 rounded-3xl border border-border bg-card text-center space-y-5" style={{ boxShadow: 'none' }}>
@@ -654,36 +613,6 @@ export function SignupPage() {
                 </Link>
               </div>
             )}
-          </div>
-        )}
-
-        {successNotice && (
-          <div
-            className="p-3.5 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-500 text-xs flex flex-col gap-2.5"
-            style={{ boxShadow: 'none' }}
-          >
-            <div className="flex items-start gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-              <span className="leading-relaxed">{successNotice}</span>
-            </div>
-
-            <div className="flex items-center gap-2 pt-0.5">
-              <button
-                type="button"
-                disabled={resending}
-                onClick={handleResendSignupEmail}
-                className="px-3 py-1 rounded-full bg-blue-500/15 hover:bg-blue-500/25 text-blue-500 font-medium text-[11px] transition-colors cursor-pointer flex items-center gap-1.5"
-              >
-                {resending ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                <span>Resend email</span>
-              </button>
-              <Link
-                to="/login"
-                className="text-[11px] font-medium underline hover:text-blue-600 transition-colors"
-              >
-                Go to Sign in
-              </Link>
-            </div>
           </div>
         )}
 

@@ -14,11 +14,42 @@ import type { User } from '@supabase/supabase-js';
 import type { Json } from '@/integrations/supabase/types';
 import { runFactoryAction } from '@/lib/push.functions';
 
-export type AppRole = 'admin' | 'manager' | 'supervisor' | 'accountant' | 'dispatch_clerk' | 'viewer' | 'pending';
+export type AppRole = 'admin' | 'manager' | 'supervisor' | 'accountant' | 'dispatch_clerk' | 'viewer' | 'user' | 'pending';
+
+export const ALL_PAGE_KEYS = [
+  { key: 'dashboard', label: 'Dashboard', path: '/' },
+  { key: 'orders', label: 'Order Entry', path: '/orders' },
+  { key: 'production', label: 'Pending Production', path: '/production' },
+  { key: 'dispatch', label: 'Dispatch & Delivery Challan', path: '/dispatch' },
+  { key: 'parties', label: 'Party Master', path: '/parties' },
+  { key: 'catalog', label: 'Item Master', path: '/items' },
+  { key: 'workers', label: 'Labour Management', path: '/labour' },
+  { key: 'expenses', label: 'Expenses & Borrowings', path: '/expenses' },
+  { key: 'reports', label: 'Reports & Realised Profit', path: '/reports' },
+  { key: 'settings', label: 'Settings', path: '/settings' },
+  { key: 'profile', label: 'Account Profile', path: '/profile' },
+] as const;
+
+export const DEFAULT_ROLE_PAGES: Record<AppRole, string[]> = {
+  admin: ['dashboard', 'orders', 'production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile', 'admin'],
+  user: ['dashboard', 'orders', 'production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
+  manager: ['dashboard', 'orders', 'production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
+  supervisor: ['dashboard', 'production', 'workers', 'parties', 'profile'],
+  accountant: ['dashboard', 'dispatch', 'expenses', 'reports', 'profile'],
+  dispatch_clerk: ['dashboard', 'dispatch', 'orders', 'catalog', 'profile'],
+  viewer: ['dashboard', 'orders', 'production', 'profile'],
+  pending: [],
+};
 
 export function roleHasCapability(role: AppRole | null | undefined, cap: string): boolean {
   if (role === 'admin') return true;
   if (!role || role === 'pending') return false;
+  // Admin-only capabilities
+  if (cap === 'manage_users' || cap === 'view_audit') {
+    return false;
+  }
+  // Standard workspace user has full software operational capabilities
+  if (role === 'user') return true;
   switch (cap) {
     case 'view_money':
       return role === 'manager' || role === 'accountant';
@@ -30,6 +61,7 @@ export function roleHasCapability(role: AppRole | null | undefined, cap: string)
     case 'set_rates':
       return role === 'manager';
     case 'create_challan':
+      return role === 'manager' || role === 'dispatch_clerk';
     case 'confirm_dispatch':
       return role === 'manager' || role === 'dispatch_clerk';
     case 'cancel_challan':
@@ -81,40 +113,30 @@ function deleteLocalRole(userId: string) {
   } catch {}
 }
 
-// Queries read from sanitized views (v_*) for column-level privacy
+// Queries read directly from base factory tables (eliminating non-existent v_* views)
 const tables = {
-  parties: 'v_party_master',
-  catalog: 'v_item_master',
-  orders: 'v_orders',
-  items: 'v_order_items',
+  parties: 'party_master',
+  catalog: 'item_master',
+  orders: 'orders',
+  items: 'order_items',
   workers: 'labour_master',
-  allocations: 'v_production_allocations',
-  challans: 'v_delivery_challans',
-  challanItems: 'v_challan_items',
-  expenses: 'v_expenses',
-  borrowings: 'v_labour_borrowings',
-  payroll: 'v_labour_payroll',
+  allocations: 'production_allocations',
+  challans: 'delivery_challans',
+  challanItems: 'challan_items',
+  expenses: 'expenses',
+  borrowings: 'labour_borrowings',
+  payroll: 'labour_payroll',
   notifications: 'factory_notifications',
-  roles: 'user_roles',
-  profiles: 'profiles'
+  profiles: 'profiles',
+  roles: 'user_roles'
 } as const;
 
 async function readFactory(): Promise<FactoryData> {
   const result = { ...emptyData };
   await Promise.all(
     Object.entries(tables).map(async ([key, table]) => {
-      let { data, error } = await (supabase.from as any)(table).select('*');
-      if (error && table.startsWith('v_')) {
-        // Graceful fallback to the underlying base table if the sanitized view is not yet compiled
-        const baseTable = table.replace(/^v_/, '');
-        const fallback = await (supabase.from as any)(baseTable).select('*');
-        if (!fallback.error) {
-          data = fallback.data;
-          error = null;
-        }
-      }
+      const { data, error } = await (supabase.from as any)(table).select('*');
       if (error) {
-        console.warn(`Query on ${table} failed:`, error.message);
         Object.assign(result, { [key]: [] });
         return;
       }
@@ -135,6 +157,7 @@ async function readFactory(): Promise<FactoryData> {
 
 interface Context {
   user: User | null;
+  authInitialized: boolean;
   profile: FactoryData['profiles'][number] | null;
   data: FactoryData;
   loading: boolean;
@@ -145,8 +168,11 @@ interface Context {
   userRole: AppRole | null;
   isAdmin: boolean;
   isPendingVerification: boolean;
+  userAllowedPages: string[];
+  hasPageAccess: (pageKey: string) => boolean;
   hasCapability: (capability: string) => boolean;
-  handoverRole: (targetUserId: string, role: AppRole) => Promise<boolean>;
+  handoverRole: (targetUserId: string, role: AppRole, allowedPages?: string[]) => Promise<boolean>;
+  updateUserPageAccess: (targetUserId: string, allowedPages: string[]) => Promise<boolean>;
   revokeRole: (targetUserId: string) => Promise<boolean>;
 }
 
@@ -160,25 +186,80 @@ export function useFactory() {
 
 export function FactoryProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
+  const [serverRole, setServerRole] = useState<AppRole | null>(null);
+  const [serverAllowedPages, setServerAllowedPages] = useState<string[] | null>(null);
   const cache = useQueryClient();
-  const query = useQuery({
-    queryKey: ['factory', user?.id ?? 'guest'],
-    queryFn: readFactory,
-    enabled: true
-  });
+
+  const loadRole = async (uid: string) => {
+    try {
+      const { fetchUserRoleStatus } = await import('@/lib/auth.functions');
+      const res = await fetchUserRoleStatus({ data: { userId: uid } });
+      if (res.success && res.role) {
+        setServerRole(res.role as AppRole);
+        setServerAllowedPages(res.allowedPages);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setUser(data.session?.user ?? null));
+    if (user?.id) {
+      loadRole(user.id);
+    } else {
+      setServerRole(null);
+      setServerAllowedPages(null);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthInitialized(true);
+    });
     const { data } = supabase.auth.onAuthStateChange((event, session) => {
       if (['SIGNED_IN', 'SIGNED_OUT', 'USER_UPDATED', 'INITIAL_SESSION'].includes(event)) {
         setUser(session?.user ?? null);
+        setAuthInitialized(true);
         if (event === 'SIGNED_OUT') cache.removeQueries({ queryKey: ['factory'] });
       }
     });
     return () => data.subscription.unsubscribe();
   }, [cache]);
 
-  // Realtime subscription listens to zero-data change pings, user_roles and profiles
+  // Determine current user's role status
+  let userRole: AppRole | null = null;
+  let isAdmin = false;
+  let isPendingVerification = false;
+
+  if (user) {
+    const localRole = getLocalRoles()[user.id] as AppRole | undefined;
+    const metadataRole = user.user_metadata?.['role'] as AppRole | undefined;
+
+    const resolved = serverRole || metadataRole || localRole;
+
+    if (resolved === 'admin') {
+      userRole = 'admin';
+      isAdmin = true;
+      isPendingVerification = false;
+    } else if (resolved && resolved !== 'pending') {
+      userRole = resolved;
+      isAdmin = false;
+      isPendingVerification = false;
+    } else {
+      userRole = 'pending';
+      isAdmin = false;
+      isPendingVerification = true;
+    }
+  }
+
+  // Only query factory data when user is authenticated and not pending verification
+  const query = useQuery({
+    queryKey: ['factory', user?.id ?? 'guest'],
+    queryFn: readFactory,
+    enabled: Boolean(user && userRole && userRole !== 'pending')
+  });
+
+  // Realtime subscription listens to zero-data change pings and profiles
   useEffect(() => {
     if (!user) return;
     const channel = supabase
@@ -186,12 +267,23 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'factory_data_pings' },
-        () => cache.invalidateQueries({ queryKey: ['factory'] })
+        () => {
+          loadRole(user.id);
+          cache.invalidateQueries({ queryKey: ['factory'] });
+        }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'user_roles' },
-        () => cache.invalidateQueries({ queryKey: ['factory'] })
+        { event: '*', schema: 'public', table: 'user_roles', filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          const newRole = (payload.new as any)?.role;
+          if (newRole) {
+            setServerRole(newRole as AppRole);
+            setServerAllowedPages((payload.new as any)?.allowed_pages || null);
+          }
+          loadRole(user.id);
+          cache.invalidateQueries({ queryKey: ['factory'] });
+        }
       )
       .on(
         'postgres_changes',
@@ -202,7 +294,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, cache]);
+  }, [user?.id, cache]);
 
   const signIn = async () => {
     if (typeof window !== 'undefined') {
@@ -211,6 +303,9 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
   };
 
   const refresh = async () => {
+    if (user?.id) {
+      await loadRole(user.id);
+    }
     await cache.invalidateQueries({ queryKey: ['factory'] });
   };
 
@@ -235,31 +330,45 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     return true;
   };
 
-  const handoverRole = async (targetUserId: string, role: AppRole) => {
+  const handoverRole = async (targetUserId: string, role: AppRole, allowedPages?: string[]) => {
     if (!user) {
       signIn();
       return false;
     }
     try {
-      try {
-        const { adminHandoverRole } = await import('@/lib/admin.functions');
-        await adminHandoverRole({ data: { targetUserId, role } });
-      } catch (err) {
-        console.warn('Server function handover fallback:', err);
-        // Call RPC admin_set_user_role directly
-        const { error: rpcErr } = await supabase.rpc('admin_set_user_role', {
-          target_user_id: targetUserId,
-          new_role: role
-        });
-        if (rpcErr) throw rpcErr;
-      }
+      const { adminHandoverRole } = await import('@/lib/admin.functions');
+      await adminHandoverRole({
+        data: {
+          targetUserId,
+          role,
+          ...(allowedPages !== undefined ? { allowedPages } : {})
+        }
+      });
 
       setLocalRole(targetUserId, role);
       await refresh();
-      toast.success(`Role updated successfully to ${role}`);
+      toast.success(role === 'user' ? 'User approved successfully' : `Role updated to ${role}`);
       return true;
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Could not handover role');
+      return false;
+    }
+  };
+
+  const updateUserPageAccess = async (targetUserId: string, allowedPages: string[]) => {
+    if (!user) {
+      signIn();
+      return false;
+    }
+    try {
+      const { adminUpdateUserPageAccess } = await import('@/lib/admin.functions');
+      await adminUpdateUserPageAccess({ data: { targetUserId, allowedPages } });
+
+      await refresh();
+      toast.success('Page access permissions updated successfully');
+      return true;
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Could not update page access');
       return false;
     }
   };
@@ -270,17 +379,8 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       return false;
     }
     try {
-      try {
-        const { adminRevokeRole } = await import('@/lib/admin.functions');
-        await adminRevokeRole({ data: { targetUserId } });
-      } catch (err) {
-        console.warn('Server function revoke fallback:', err);
-        const { error: rpcErr } = await supabase.rpc('admin_set_user_role', {
-          target_user_id: targetUserId,
-          new_role: 'pending'
-        });
-        if (rpcErr) throw rpcErr;
-      }
+      const { adminRevokeRole } = await import('@/lib/admin.functions');
+      await adminRevokeRole({ data: { targetUserId } });
 
       deleteLocalRole(targetUserId);
       await refresh();
@@ -292,39 +392,25 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Determine current user's role status
-  let userRole: AppRole | null = null;
-  let isAdmin = false;
-  let isPendingVerification = false;
+  // Tenant page access calculations
+  const currentUserRoleRow = user ? (query.data?.roles ?? []).find(r => r.user_id === user.id) : null;
+  const userAllowedPages: string[] = user
+    ? (isAdmin
+        ? [...DEFAULT_ROLE_PAGES.admin]
+        : (serverAllowedPages !== null && Array.isArray(serverAllowedPages))
+          ? serverAllowedPages
+          : (currentUserRoleRow?.allowed_pages !== undefined && currentUserRoleRow?.allowed_pages !== null && Array.isArray(currentUserRoleRow.allowed_pages))
+            ? currentUserRoleRow.allowed_pages
+            : [...(DEFAULT_ROLE_PAGES[userRole || 'pending'] || [])])
+    : [];
 
-  if (user) {
-    const rolesList = query.data?.roles ?? [];
-    const dbRole = rolesList.find(r => r.user_id === user.id)?.role as AppRole | undefined;
-    const localRole = getLocalRoles()[user.id] as AppRole | undefined;
-    const metadataRole = user.user_metadata?.['role'] as AppRole | undefined;
-
-    const resolved = dbRole || localRole || metadataRole;
-
-    const totalAdmins = rolesList.filter(r => r.role === 'admin').length;
-    const isFirstBootstrapUser = totalAdmins === 0 && !resolved;
-
-    if (resolved === 'admin' || isFirstBootstrapUser) {
-      userRole = 'admin';
-      isAdmin = true;
-      isPendingVerification = false;
-      if (isFirstBootstrapUser && typeof window !== 'undefined') {
-        setLocalRole(user.id, 'admin');
-      }
-    } else if (resolved && resolved !== 'pending') {
-      userRole = resolved;
-      isAdmin = false;
-      isPendingVerification = false;
-    } else {
-      userRole = 'pending';
-      isAdmin = false;
-      isPendingVerification = true;
-    }
-  }
+  const hasPageAccess = (pageKey: string): boolean => {
+    if (!user) return false;
+    if (isPendingVerification || userRole === 'pending') return false;
+    if (isAdmin) return true;
+    if (pageKey === 'admin' || pageKey === 'permissions') return false;
+    return userAllowedPages.includes(pageKey);
+  };
 
   const profile = user ? (query.data?.profiles ?? []).find(p => p.id === user.id) || null : null;
   const hasCapability = (capability: string) => roleHasCapability(userRole, capability);
@@ -333,6 +419,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     <FactoryContext.Provider
       value={{
         user,
+        authInitialized,
         profile,
         data: query.data ?? emptyData,
         loading: query.isLoading,
@@ -343,8 +430,11 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         userRole,
         isAdmin,
         isPendingVerification,
+        userAllowedPages,
+        hasPageAccess,
         hasCapability,
         handoverRole,
+        updateUserPageAccess,
         revokeRole,
       }}
     >

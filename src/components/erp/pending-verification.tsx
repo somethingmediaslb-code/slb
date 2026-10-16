@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Clock, Copy, Check, LogOut, RefreshCw, ShieldCheck, Database, UserCheck } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
+import { Clock, Copy, Check, LogOut, RefreshCw, ShieldCheck, Database, UserCheck, ArrowLeft } from 'lucide-react';
 import { useFactory } from './provider';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -27,7 +28,7 @@ export function PendingVerificationPage() {
         async (payload) => {
           const newRole = (payload.new as any)?.role;
           if (newRole && newRole !== 'pending') {
-            toast.success(`Access granted! You have been assigned the "${newRole}" role.`);
+            toast.success(`Account approved! Welcome to the workspace as ${newRole === 'user' ? 'User' : 'Administrator'}.`);
             await refresh();
           }
         }
@@ -46,9 +47,16 @@ export function PendingVerificationPage() {
       )
       .subscribe();
 
-    // Fallback polling every 4 seconds in case WebSockets are interrupted
-    const interval = setInterval(() => {
-      refresh();
+    // Fallback polling role check every 4 seconds in case WebSockets are interrupted
+    const interval = setInterval(async () => {
+      try {
+        const { fetchUserRoleStatus } = await import('@/lib/auth.functions');
+        const res = await fetchUserRoleStatus({ data: { userId: user.id } });
+        if (res.success && res.role && res.role !== 'pending') {
+          toast.success(`Account approved! Welcome to the workspace as ${res.role === 'user' ? 'User' : 'Administrator'}.`);
+          await refresh();
+        }
+      } catch {}
     }, 4000);
 
     return () => {
@@ -68,8 +76,14 @@ export function PendingVerificationPage() {
   const handleCheckStatus = async () => {
     setChecking(true);
     try {
-      await refresh();
-      toast.info('Verification status re-checked');
+      const { fetchUserRoleStatus } = await import('@/lib/auth.functions');
+      const res = await fetchUserRoleStatus({ data: { ...(user?.id ? { userId: user.id } : {}) } });
+      if (res.success && res.role && res.role !== 'pending') {
+        toast.success(`Account approved! Welcome to the workspace.`);
+        await refresh();
+      } else {
+        toast.info('Verification status re-checked: awaiting approval.');
+      }
     } catch {
       toast.error('Could not refresh status');
     } finally {
@@ -96,14 +110,13 @@ export function PendingVerificationPage() {
         <div className="flex flex-col gap-2">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-500 border border-amber-500/25 mx-auto">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-            <span>Awaiting Role Handover</span>
+            <span>Pending Administrator Approval</span>
           </div>
           <h1 className="text-xl font-semibold tracking-tight text-foreground">
             Welcome, {displayName}
           </h1>
           <p className="text-xs text-muted-foreground leading-relaxed max-w-[340px] mx-auto">
-            Your account profile has been recorded in the database.
-            An administrator must assign your role before you can access workspace operations.
+            Your account has been created. An administrator must approve your account before you can access the dashboard and software.
           </p>
         </div>
 
@@ -126,9 +139,9 @@ export function PendingVerificationPage() {
           </div>
 
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Database Status</span>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500">
-              <Check className="w-3 h-3" /> Profile & Role Initialized
+            <span className="text-muted-foreground">Account Status</span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-500">
+              <Clock className="w-3 h-3" /> Awaiting Approval
             </span>
           </div>
 
@@ -155,7 +168,7 @@ export function PendingVerificationPage() {
         <div className="w-full p-3 rounded-2xl border border-border bg-muted/40 text-[11px] text-muted-foreground flex items-center gap-2.5 text-left">
           <Database className="w-4 h-4 text-primary shrink-0" />
           <span className="leading-relaxed">
-            Real-time listener active. As soon as an admin assigns your role in the system or database, this screen will instantly unlock.
+            Real-time listener active. As soon as an administrator approves your account, this screen will instantly unlock and take you to the dashboard.
           </span>
         </div>
 
@@ -174,12 +187,19 @@ export function PendingVerificationPage() {
 
           <button
             type="button"
-            onClick={() => supabase.auth.signOut()}
-            className="w-full h-11 px-5 rounded-full border border-border bg-transparent hover:bg-secondary text-muted-foreground hover:text-foreground text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
+            onClick={async () => {
+              try {
+                await supabase.auth.signOut();
+              } catch {}
+              if (typeof window !== 'undefined') {
+                window.location.href = '/login';
+              }
+            }}
+            className="w-full h-11 px-5 rounded-full border border-border bg-secondary hover:bg-muted text-foreground text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
             style={{ boxShadow: 'none' }}
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign out</span>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to Auth Page</span>
           </button>
         </div>
       </div>

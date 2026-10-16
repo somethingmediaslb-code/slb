@@ -1,5 +1,5 @@
 import {Link,useRouterState} from '@tanstack/react-router';
-import {useState,type ReactNode} from 'react';
+import {useState,useEffect,type ReactNode} from 'react';
 import {
   Box,
   LayoutDashboard,
@@ -27,6 +27,7 @@ import {
   Sun,
   Moon,
   BarChart3,
+  KeyRound,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
@@ -198,6 +199,7 @@ export const mastersNav = [
 export const financeNav = [
   { to: '/expenses', label: 'Expenses & Borrowings', icon: Wallet, key: 'expenses' },
   { to: '/reports', label: 'Reports & Realised Profit', icon: BarChart3, key: 'reports' },
+  { to: '/permissions', label: 'Page Permissions', icon: KeyRound, key: 'permissions' },
   { to: '/admin', label: 'Admin Panel', icon: ShieldCheck, key: 'admin' },
   { to: '/profile', label: 'Account Profile', icon: UserRound, key: 'profile' },
   { to: '/settings', label: 'Settings', icon: Settings, key: 'settings' }
@@ -220,7 +222,7 @@ export function AppShell({children}:{children:ReactNode}){
   });
   const [alerts,setAlerts]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
-  const {user,data,signIn,isPendingVerification,userRole,isAdmin}=useFactory();
+  const {user,authInitialized,data,signIn,isPendingVerification,userRole,isAdmin,hasPageAccess}=useFactory();
 
   const toggleSidebar = () => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -245,6 +247,15 @@ export function AppShell({children}:{children:ReactNode}){
     return 'dark';
   });
 
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('slbw_read_notifs') || '["op-notif-4", "op-notif-5"]');
+    } catch {
+      return ['op-notif-4', 'op-notif-5'];
+    }
+  });
+  const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
+
   const toggleTheme = (newTheme: 'dark' | 'light') => {
     setTheme(newTheme);
     if (typeof document !== 'undefined') {
@@ -259,7 +270,32 @@ export function AppShell({children}:{children:ReactNode}){
     }
   };
 
-  // If user is authenticated but not yet handed over an active role by admin
+  // If user is not authenticated, redirect to /login
+  useEffect(() => {
+    if (authInitialized && !user) {
+      if (typeof window !== 'undefined') {
+        const isAuthRoute = window.location.pathname.startsWith('/login') || window.location.pathname.startsWith('/signup') || window.location.pathname.startsWith('/auth');
+        if (!isAuthRoute) {
+          window.location.href = '/login';
+        }
+      }
+    }
+  }, [authInitialized, user]);
+
+  if (!authInitialized) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 bg-background text-foreground">
+        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+        <p className="text-xs text-muted-foreground font-medium">Loading SLBW workspace…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  // If user is authenticated but not yet approved by an admin
   if (user && isPendingVerification) {
     return <PendingVerificationPage />;
   }
@@ -276,15 +312,6 @@ export function AppShell({children}:{children:ReactNode}){
   const totalCompletedOrders = data.orders.filter(o => o.status === 'Completed').length;
   const avgWin = data.orders.length > 0 ? Math.round((totalCompletedOrders / data.orders.length) * 100) : 51;
   const activeRunsCount = data.orders.filter(o => o.status === 'In Production' || o.status === 'Pending').length;
-
-  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('slbw_read_notifs') || '["op-notif-4", "op-notif-5"]');
-    } catch {
-      return ['op-notif-4', 'op-notif-5'];
-    }
-  });
-  const [notifTab, setNotifTab] = useState<'all' | 'unread'>('all');
 
   const liveNotifications: NotificationItem[] = data.notifications.map(n => {
     const parts = n.title.split(' ');
@@ -348,24 +375,36 @@ export function AppShell({children}:{children:ReactNode}){
     return path === target || path.startsWith(target + '/');
   };
 
-  const filteredMainNav = mainNav.filter(n => {
-    if (n.key === 'production') return userRole !== 'accountant' && userRole !== 'dispatch_clerk';
-    if (n.key === 'dispatch') return userRole !== 'accountant';
-    return true;
-  });
+  const getPageKeyFromPath = (p: string) => {
+    if (p === '/') return 'dashboard';
+    if (p.startsWith('/orders')) return 'orders';
+    if (p.startsWith('/production')) return 'production';
+    if (p.startsWith('/dispatch')) return 'dispatch';
+    if (p.startsWith('/parties')) return 'parties';
+    if (p.startsWith('/items')) return 'catalog';
+    if (p.startsWith('/labour')) return 'workers';
+    if (p.startsWith('/expenses')) return 'expenses';
+    if (p.startsWith('/reports')) return 'reports';
+    if (p.startsWith('/permissions')) return 'permissions';
+    if (p.startsWith('/settings')) return 'settings';
+    if (p.startsWith('/profile')) return 'profile';
+    if (p.startsWith('/admin')) return 'admin';
+    return null;
+  };
 
-  const filteredMastersNav = mastersNav.filter(n => {
-    if (n.key === 'parties') return userRole !== 'supervisor' && userRole !== 'dispatch_clerk';
-    if (n.key === 'catalog') return userRole !== 'dispatch_clerk';
-    if (n.key === 'workers') return userRole !== 'dispatch_clerk' && userRole !== 'viewer';
-    return true;
-  });
+  const currentPageKey = getPageKeyFromPath(path);
+  const isPageDenied = Boolean(user && currentPageKey && !hasPageAccess(currentPageKey));
 
+  const filteredMainNav = mainNav.filter(n => hasPageAccess(n.key));
+  const filteredMastersNav = mastersNav.filter(n => hasPageAccess(n.key));
   const filteredFinanceNav = financeNav.filter(n => {
-    if (n.key === 'expenses') return userRole !== 'supervisor' && userRole !== 'dispatch_clerk' && userRole !== 'viewer';
-    if (n.key === 'admin') return isAdmin;
-    return true;
+    if (n.key === 'admin' || n.key === 'permissions') return isAdmin;
+    return hasPageAccess(n.key);
   });
+
+  const fallbackAccessibleRoute = hasPageAccess('dashboard')
+    ? '/'
+    : (filteredMainNav[0]?.to || filteredMastersNav[0]?.to || filteredFinanceNav[0]?.to || '/');
 
   const current = navigation.find(n => isNavActive(n.to));
   const currentTitle = current?.label ?? 'Dashboard';
@@ -385,7 +424,6 @@ export function AppShell({children}:{children:ReactNode}){
             <Link className="brand-link" to="/" onClick={()=>setOpen(false)} title="SLBW Home">
               <div className="brand-text">
                 <span className="brand-title">SLBW</span>
-                <span className="brand-sub">Wooden box manufacturing</span>
               </div>
             </Link>
             <button
@@ -760,7 +798,31 @@ export function AppShell({children}:{children:ReactNode}){
           </div>
         </header>
 
-        <main className="page-body">{children}</main>
+        <main className="page-body">
+          {isPageDenied ? (
+            <div className="p-8 border border-border rounded-2xl bg-card text-center space-y-4 max-w-lg mx-auto my-12 shadow-sm">
+              <div className="w-12 h-12 rounded-full bg-destructive/10 text-destructive grid place-items-center mx-auto">
+                <ShieldCheck size={24} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Tenant Page Access Restricted</h2>
+                <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                  Your workspace administrator has not granted your account permission to view the <strong>{currentTitle}</strong> page.
+                  Factory operations and records for this section are strictly tenant-isolated.
+                </p>
+              </div>
+              <div className="pt-2 flex justify-center gap-3">
+                <Link to={fallbackAccessibleRoute}>
+                  <Button variant="default" className="rounded-full shadow-none px-6">
+                    {hasPageAccess('dashboard') ? 'Return to Dashboard' : 'Go to Available Workspace Page'}
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
 
       {/* Slide-over My Profile Sheet */}

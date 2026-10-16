@@ -646,16 +646,19 @@ export type Database = {
           id: string
           role: string
           user_id: string
+          allowed_pages?: string[] | null
         }
         Insert: {
           id?: string
           role: string
           user_id: string
+          allowed_pages?: string[] | null
         }
         Update: {
           id?: string
           role?: string
           user_id?: string
+          allowed_pages?: string[] | null
         }
         Relationships: []
       }
@@ -666,6 +669,7 @@ export type Database = {
     Functions: {
       factory_action: { Args: { action: string; payload: Json }; Returns: Json }
       admin_set_user_role: { Args: { new_role: string; target_user_id: string }; Returns: Json }
+      admin_set_user_page_access: { Args: { p_allowed_pages: string[]; p_target_user_id: string }; Returns: Json }
     }
     Enums: {
       [_ in never]: never
