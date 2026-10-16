@@ -61,10 +61,10 @@ export function LoginPage() {
     setError('');
     setInfoNotice('');
     try {
-      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://hfnejjmvmvkphdqzohfl.supabase.co';
+      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://noiuvevcvxlxqmrkqjpn.supabase.co';
       const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
       const probeRes = await fetch(authUrl, {
-        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || '' },
+        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
       }).catch(() => null);
 
       if (probeRes && !probeRes.ok) {
@@ -377,10 +377,10 @@ export function SignupPage() {
     setBusy(true);
     setError('');
     try {
-      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://hfnejjmvmvkphdqzohfl.supabase.co';
+      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://noiuvevcvxlxqmrkqjpn.supabase.co';
       const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
       const probeRes = await fetch(authUrl, {
-        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || '' },
+        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
       }).catch(() => null);
 
       if (probeRes && !probeRes.ok) {
