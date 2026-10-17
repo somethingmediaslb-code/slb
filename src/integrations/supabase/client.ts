@@ -45,25 +45,39 @@ function createSupabaseFetch(supabaseUrl: string, supabaseKey: string): typeof f
 }
 
 
+function cleanEnv(val: unknown): string | undefined {
+  if (typeof val !== 'string') return undefined;
+  const t = val.trim().replace(/^["']|["']$/g, '');
+  return t.length > 0 ? t : undefined;
+}
+
 function createSupabaseClient() {
-  // Use static dot-notation for Vite build-time replacement, fall back to SSR or default project credentials
-  const SUPABASE_URL =
-    import.meta.env['VITE_SUPABASE_URL'] ||
-    (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'] : undefined) ||
-    'https://noiuvevcvxlxqmrkqjpn.supabase.co';
+  const rawUrl =
+    cleanEnv(import.meta.env['VITE_SUPABASE_URL']) ||
+    cleanEnv(import.meta.env['SUPABASE_URL']) ||
+    (typeof process !== 'undefined' && process.env
+      ? cleanEnv(process.env['VITE_SUPABASE_URL']) || cleanEnv(process.env['SUPABASE_URL'])
+      : undefined);
+
+  const SUPABASE_URL = rawUrl?.replace(/\/+$/, '');
 
   const SUPABASE_PUBLISHABLE_KEY =
-    import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
-    (typeof process !== 'undefined' && process.env ? process.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || process.env['SUPABASE_PUBLISHABLE_KEY'] : undefined) ||
-    'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy';
+    cleanEnv(import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY']) ||
+    cleanEnv(import.meta.env['SUPABASE_PUBLISHABLE_KEY']) ||
+    cleanEnv(import.meta.env['SUPABASE_ANON_KEY']) ||
+    (typeof process !== 'undefined' && process.env
+      ? cleanEnv(process.env['VITE_SUPABASE_PUBLISHABLE_KEY']) ||
+        cleanEnv(process.env['SUPABASE_PUBLISHABLE_KEY']) ||
+        cleanEnv(process.env['SUPABASE_ANON_KEY'])
+      : undefined);
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [
-      ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
+      ...(!SUPABASE_URL ? ['VITE_SUPABASE_URL'] : []),
+      ...(!SUPABASE_PUBLISHABLE_KEY ? ['VITE_SUPABASE_PUBLISHABLE_KEY'] : []),
     ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Please set them in your environment configuration.`;
-    console.error(`[Supabase] ${message}`);
+    const message = `[Supabase] Missing environment variable(s): ${missing.join(', ')}. Please add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY to your Vercel Project Settings > Environment Variables.`;
+    console.error(message);
     throw new Error(message);
   }
 

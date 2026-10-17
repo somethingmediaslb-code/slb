@@ -29,17 +29,29 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
+function cleanEnv(val: unknown): string | undefined {
+  if (typeof val !== 'string') return undefined;
+  const t = val.trim().replace(/^["']|["']$/g, '');
+  return t.length > 0 ? t : undefined;
+}
+
 function createSupabaseAdminClient() {
-  const SUPABASE_URL = process.env['SUPABASE_URL'];
-  const SUPABASE_SERVICE_ROLE_KEY = process.env['SUPABASE_SERVICE_ROLE_KEY'];
+  const rawUrl =
+    cleanEnv(process.env['SUPABASE_URL']) ||
+    cleanEnv(process.env['VITE_SUPABASE_URL']);
+  const SUPABASE_URL = rawUrl?.replace(/\/+$/, '');
+
+  const SUPABASE_SERVICE_ROLE_KEY =
+    cleanEnv(process.env['SUPABASE_SERVICE_ROLE_KEY']) ||
+    cleanEnv(process.env['VITE_SUPABASE_SERVICE_ROLE_KEY']);
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     const missing = [
       ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
       ...(!SUPABASE_SERVICE_ROLE_KEY ? ['SUPABASE_SERVICE_ROLE_KEY'] : []),
     ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Please set them in your environment configuration.`;
-    console.error(`[Supabase] ${message}`);
+    const message = `[Supabase Admin] Missing required server environment variable(s): ${missing.join(', ')}. Please configure them in your server environment (e.g. Vercel Project Settings > Environment Variables).`;
+    console.error(message);
     throw new Error(message);
   }
 

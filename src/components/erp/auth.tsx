@@ -61,18 +61,29 @@ export function LoginPage() {
     setError('');
     setInfoNotice('');
     try {
-      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://noiuvevcvxlxqmrkqjpn.supabase.co';
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
-      const probeRes = await fetch(authUrl, {
-        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
-      }).catch(() => null);
+      const rawUrl =
+        import.meta.env['VITE_SUPABASE_URL'] ||
+        import.meta.env['SUPABASE_URL'];
+      const pubKey =
+        import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
+        import.meta.env['SUPABASE_PUBLISHABLE_KEY'] ||
+        import.meta.env['SUPABASE_ANON_KEY'];
 
-      if (probeRes && !probeRes.ok) {
-        const body = await probeRes.json().catch(() => null);
-        if (body?.msg?.includes('not enabled') || body?.error_code === 'validation_failed') {
-          setError('Google Sign-In is not enabled on this Supabase project yet. Please sign in using your work email & password below.');
-          setBusy(false);
-          return;
+      if (rawUrl && pubKey) {
+        const supabaseUrl = rawUrl.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+        const cleanKey = pubKey.trim().replace(/^["']|["']$/g, '');
+        const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
+        const probeRes = await fetch(authUrl, {
+          headers: { apikey: cleanKey },
+        }).catch(() => null);
+
+        if (probeRes && !probeRes.ok) {
+          const body = await probeRes.json().catch(() => null);
+          if (body?.msg?.includes('not enabled') || body?.error_code === 'validation_failed') {
+            setError('Google Sign-In is not enabled on this Supabase project yet. Please sign in using your work email & password below.');
+            setBusy(false);
+            return;
+          }
         }
       }
 
@@ -377,18 +388,29 @@ export function SignupPage() {
     setBusy(true);
     setError('');
     try {
-      const supabaseUrl = import.meta.env['VITE_SUPABASE_URL'] || 'https://noiuvevcvxlxqmrkqjpn.supabase.co';
-      const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
-      const probeRes = await fetch(authUrl, {
-        headers: { apikey: import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || 'sb_publishable_84PrxDpyFtaSiS55VLVNRg_Zjog4Hxy' },
-      }).catch(() => null);
+      const rawUrl =
+        import.meta.env['VITE_SUPABASE_URL'] ||
+        import.meta.env['SUPABASE_URL'];
+      const pubKey =
+        import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] ||
+        import.meta.env['SUPABASE_PUBLISHABLE_KEY'] ||
+        import.meta.env['SUPABASE_ANON_KEY'];
 
-      if (probeRes && !probeRes.ok) {
-        const body = await probeRes.json().catch(() => null);
-        if (body?.msg?.includes('not enabled') || body?.error_code === 'validation_failed') {
-          setError('Google Sign-In is not enabled on this Supabase project yet. Please create your account with work email & password below.');
-          setBusy(false);
-          return;
+      if (rawUrl && pubKey) {
+        const supabaseUrl = rawUrl.trim().replace(/^["']|["']$/g, '').replace(/\/+$/, '');
+        const cleanKey = pubKey.trim().replace(/^["']|["']$/g, '');
+        const authUrl = `${supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(window.location.origin + '/')}`;
+        const probeRes = await fetch(authUrl, {
+          headers: { apikey: cleanKey },
+        }).catch(() => null);
+
+        if (probeRes && !probeRes.ok) {
+          const body = await probeRes.json().catch(() => null);
+          if (body?.msg?.includes('not enabled') || body?.error_code === 'validation_failed') {
+            setError('Google Sign-In is not enabled on this Supabase project yet. Please create your account with work email & password below.');
+            setBusy(false);
+            return;
+          }
         }
       }
 

@@ -34,16 +34,23 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
     
-    const SUPABASE_URL = process.env['SUPABASE_URL'];
-    const SUPABASE_PUBLISHABLE_KEY = process.env['SUPABASE_PUBLISHABLE_KEY'];
+    const rawUrl =
+      process.env['SUPABASE_URL']?.trim().replace(/^["']|["']$/g, '') ||
+      process.env['VITE_SUPABASE_URL']?.trim().replace(/^["']|["']$/g, '');
+    const SUPABASE_URL = rawUrl ? rawUrl.replace(/\/+$/, '') : undefined;
+
+    const SUPABASE_PUBLISHABLE_KEY =
+      process.env['SUPABASE_PUBLISHABLE_KEY']?.trim().replace(/^["']|["']$/g, '') ||
+      process.env['SUPABASE_ANON_KEY']?.trim().replace(/^["']|["']$/g, '') ||
+      process.env['VITE_SUPABASE_PUBLISHABLE_KEY']?.trim().replace(/^["']|["']$/g, '');
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       const missing = [
         ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
         ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
       ];
-      const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Please set them in your environment configuration.`;
-      console.error(`[Supabase] ${message}`);
+      const message = `[Supabase Auth Middleware] Missing environment variable(s): ${missing.join(', ')}. Please set them in your server environment configuration.`;
+      console.error(message);
       throw new Error(message);
     }
     
