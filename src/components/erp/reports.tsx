@@ -506,11 +506,6 @@ export function Reports() {
                 Accounting Flow Separation · Unrealised Pipeline & WIP Balance
               </h3>
             </div>
-            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-              In accordance with factory accounting standards, revenue and profit are strictly recognised only upon physical
-              dispatch and Delivery Challan issuance. Orders in queue and finished inventory on the floor remain unrealised
-              until dispatched.
-            </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div className="p-2.5 bg-background border border-border rounded-lg">
                 <span className="text-muted-foreground block text-[11px]">Unrealised PO Backlog Value:</span>

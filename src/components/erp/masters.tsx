@@ -20,9 +20,9 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
     fields:[['company_name','Company Name'],['phone_number','Phone Number'],['email','Email Address'],['gstin','GSTIN Number'],['address','Factory / Billing Address']]
   },
   items:{
-    title:'Item Master',
+    title:'Box Types',
     entity:'box specifications',
-    add:'Add Catalog Item',
+    add:'Add Box Type',
     fields:[['box_type','Box Type'],['size_dimensions','Size Dimensions'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
   },
   workers:{
@@ -192,12 +192,7 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
                       const name=String(val||'');
                       return (
                         <td key={key} className="font-medium text-foreground">
-                          <div className="flex items-center gap-2.5">
-                            <span className="avatar !w-6 !h-6 !text-[10px] font-semibold bg-accent">
-                              {name.slice(0,2).toUpperCase()}
-                            </span>
-                            <span>{name}</span>
-                          </div>
+                          <span>{name}</span>
                         </td>
                       );
                     }
@@ -280,10 +275,7 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
                 onClick={() => setViewPartyId(id)}
               >
                 <div className="mobile-card-top">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="avatar !w-7 !h-7 !text-[10px] font-semibold bg-accent flex-shrink-0">
-                      {name.slice(0, 2).toUpperCase()}
-                    </span>
+                  <div className="flex items-center gap-2 min-w-0">
                     <div className="min-w-0">
                       <div className="mobile-card-title">{name}</div>
                       <div className="mobile-card-sub">{phone}</div>

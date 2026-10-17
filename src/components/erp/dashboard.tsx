@@ -355,10 +355,7 @@ export function Dashboard(){
                     </td>
                     <td className="font-medium text-foreground">{o.order_no}</td>
                     <td>
-                      <div className="flex items-center gap-2.5">
-                        <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
-                          {monogram}
-                        </span>
+                      <div className="flex items-center gap-2">
                         <span className="font-medium text-foreground">{partyName}</span>
                       </div>
                     </td>
@@ -397,10 +394,7 @@ export function Dashboard(){
             return (
               <div key={o.id} className="mobile-record-card">
                 <div className="mobile-card-top">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
-                      {monogram}
-                    </span>
+                  <div className="flex items-center gap-2 min-w-0">
                     <div className="min-w-0">
                       <div className="mobile-card-title">{o.order_no}</div>
                       <div className="mobile-card-sub">{partyName}</div>

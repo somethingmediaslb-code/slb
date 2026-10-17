@@ -1,11 +1,11 @@
 import {VolumeCharts} from './volume-charts';
 import {useState,useEffect} from 'react';
-import {Printer,MessageCircle,FilePlus,Truck,CheckCircle2} from 'lucide-react';
+import {Printer,FilePlus,Truck,CheckCircle2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker,WhatsAppIcon} from './common';
 import {downloadCsv,dateLabel,money,today,number,type Row} from '@/lib/erp-data';
 
 export function Dispatch(){
@@ -194,10 +194,7 @@ export function Dispatch(){
                         <Checkbox aria-label={`Select ${i.box_type}`} />
                       </td>
                       <td>
-                        <div className="flex items-center gap-2.5">
-                          <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
-                            {monogram}
-                          </span>
+                        <div className="flex items-center gap-2">
                           <div>
                             <div className="font-medium text-foreground">{partyName}</div>
                             <div className="text-xs text-muted-foreground">{d.orders.find(o=>o.id===i.order_id)?.order_no || '—'}</div>
@@ -262,9 +259,6 @@ export function Dispatch(){
                 <div key={i.id} className="mobile-record-card" onClick={()=>setSelected(i)}>
                   <div className="mobile-card-top">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
-                        {monogram}
-                      </span>
                       <div className="min-w-0">
                         <div className="mobile-card-title">{partyName}</div>
                         <div className="mobile-card-sub">{orderNo} · {i.box_type}</div>
@@ -351,10 +345,7 @@ export function Dispatch(){
                       </td>
                       <td className="font-medium text-foreground">{c.challan_number}</td>
                       <td>
-                        <div className="flex items-center gap-2.5">
-                          <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
-                            {monogram}
-                          </span>
+                        <div className="flex items-center gap-2">
                           <span className="font-medium text-foreground">{partyName}</span>
                         </div>
                       </td>
@@ -406,7 +397,7 @@ export function Dispatch(){
                             disabled={c.status!=='Dispatched'}
                             onClick={()=>whatsapp(c)}
                           >
-                            <MessageCircle className="w-4 h-4"/>
+                            <WhatsAppIcon className="w-4 h-4"/>
                           </Button>
                         </div>
                       </td>
@@ -443,9 +434,6 @@ export function Dispatch(){
                 <div key={c.id} className="mobile-record-card">
                   <div className="mobile-card-top">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
-                        {monogram}
-                      </span>
                       <div className="min-w-0">
                         <div className="mobile-card-title">{c.challan_number}</div>
                         <div className="mobile-card-sub">{partyName}</div>
@@ -519,8 +507,9 @@ export function Dispatch(){
                       size="sm"
                       disabled={c.status!=='Dispatched'}
                       onClick={()=>whatsapp(c)}
+                      title="Share Delivery Challan via WhatsApp"
                     >
-                      <MessageCircle className="w-3.5 h-3.5"/>
+                      <WhatsAppIcon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400"/>
                     </Button>
                   </div>
                 </div>
@@ -586,7 +575,7 @@ export function Dispatch(){
 
               <label>
                 Freight Charges (₹)
-                <input name="freight_charges" type="number" min={0} step=".01" defaultValue={0} required/>
+                <input name="freight_charges" type="number" min={0} step=".01" placeholder="e.g. 500" />
               </label>
             </div>
 

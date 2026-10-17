@@ -194,7 +194,7 @@ export const mainNav = [
 
 export const mastersNav = [
   { to: '/parties', label: 'Party Master', icon: Building2, key: 'parties' },
-  { to: '/items', label: 'Item Master', icon: Package, key: 'catalog' },
+  { to: '/box-types', label: 'Box Types', icon: Package, key: 'catalog' },
   { to: '/labour', label: 'Labour Management', icon: Users, key: 'workers' },
 ] as const;
 
@@ -224,7 +224,7 @@ export function AppShell({children}:{children:ReactNode}){
   });
   const [alerts,setAlerts]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
-  const {user,authInitialized,data,signIn,isPendingVerification,userRole,isAdmin,hasPageAccess}=useFactory();
+  const {user,authInitialized,data,signIn,isPendingVerification,isRoleLoading,userRole,isAdmin,hasPageAccess}=useFactory();
 
   const toggleSidebar = () => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -284,7 +284,7 @@ export function AppShell({children}:{children:ReactNode}){
     }
   }, [authInitialized, user]);
 
-  if (!authInitialized) {
+  if (!authInitialized || isRoleLoading) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 bg-background text-foreground">
         <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -297,7 +297,7 @@ export function AppShell({children}:{children:ReactNode}){
     return null;
   }
 
-  // If user is authenticated but not yet approved by an admin
+  // If user is authenticated and verified as pending by server
   if (user && isPendingVerification) {
     return <PendingVerificationPage />;
   }
@@ -313,7 +313,12 @@ export function AppShell({children}:{children:ReactNode}){
   const activeOrdersCount = data.orders.filter(o => o.status !== 'Completed').length;
   const totalCompletedOrders = data.orders.filter(o => o.status === 'Completed').length;
   const avgWin = data.orders.length > 0 ? Math.round((totalCompletedOrders / data.orders.length) * 100) : 51;
-  const activeRunsCount = data.orders.filter(o => o.status === 'In Production' || o.status === 'Pending').length;
+  // Count matches exactly what the Pending Production queue shows (active items with completed_qty < ordered_qty)
+  const activeRunsCount = data.items.filter(i => {
+    const o = data.orders.find(ord => ord.id === i.order_id);
+    if (o && (o.status === 'Completed' || o.status === 'Cancelled')) return false;
+    return i.completed_qty < i.ordered_qty;
+  }).length;
 
   const liveNotifications: NotificationItem[] = data.notifications.map(n => {
     const parts = n.title.split(' ');
@@ -420,7 +425,7 @@ export function AppShell({children}:{children:ReactNode}){
     if (path.startsWith('/production')) return { to: '/orders' as const, search: { new: true }, title: 'New Production Run' };
     if (path.startsWith('/dispatch')) return { to: '/dispatch' as const, search: { new: true }, title: 'New Challan' };
     if (path.startsWith('/parties')) return { to: '/parties' as const, search: { new: true }, title: 'New Party' };
-    if (path.startsWith('/items')) return { to: '/items' as const, search: { new: true }, title: 'New Item' };
+    if (path.startsWith('/box-types') || path.startsWith('/items')) return { to: '/box-types' as const, search: { new: true }, title: 'New Box Type' };
     if (path.startsWith('/labour')) return { to: '/labour' as const, search: { new: true }, title: 'New Labour' };
     if (path.startsWith('/expenses')) return { to: '/expenses' as const, search: { new: true }, title: 'New Expense' };
     return { to: '/orders' as const, search: { new: true }, title: 'New Order' };
@@ -551,22 +556,6 @@ export function AppShell({children}:{children:ReactNode}){
 
           {/* Bottom Capacity Card & User Profile */}
           <div className="sidebar-bottom">
-            <div className="sidebar-capacity-card" title={`Plant Online: ${activeRunsCount} active production ${activeRunsCount === 1 ? 'run' : 'runs'}`}>
-              <div className="capacity-text">
-                <div className="capacity-title">
-                  <span className="capacity-dot" /> Plant Online
-                </div>
-                <span className="capacity-sub">
-                  {activeRunsCount} active production {activeRunsCount === 1 ? 'run' : 'runs'}
-                </span>
-              </div>
-              <Link to="/orders" className="capacity-btn" onClick={() => setOpen(false)}>
-                Orders
-              </Link>
-              <div className="capacity-collapsed-dot">
-                <span className="capacity-dot" />
-              </div>
-            </div>
 
             {user ? (
               <div className="sidebar-user-row">
@@ -576,9 +565,6 @@ export function AppShell({children}:{children:ReactNode}){
                   className="sidebar-user-trigger"
                   title={`${userName} (${user.user_metadata['job_title'] || userRole || 'User'})`}
                 >
-                  <span className="avatar !w-6 !h-6 !text-[10px] font-semibold bg-primary text-primary-foreground flex-shrink-0">
-                    {userInitial}
-                  </span>
                   <div className="truncate text-left min-w-0 user-details">
                     <div className="text-xs font-medium text-foreground truncate">{userName}</div>
                     <div className="text-[10px] text-muted-foreground truncate">{user.user_metadata['job_title'] || (userRole === 'admin' ? 'Administrator' : (userRole || 'User'))}</div>
@@ -628,10 +614,6 @@ export function AppShell({children}:{children:ReactNode}){
           </div>
 
           <div className="top-tools">
-            <Link to="/orders" className="topbar-icon-btn" title="Search records">
-              <Search size={14} />
-            </Link>
-
             {/* Theme options: pill on sm+, compact single icon button on mobile */}
             <div className="hidden sm:inline-flex theme-switcher-pill" role="radiogroup" aria-label="Theme options">
               <button
@@ -786,29 +768,6 @@ export function AppShell({children}:{children:ReactNode}){
                 </div>
               </PopoverContent>
             </Popover>
-
-            {user ? (
-              <button
-                type="button"
-                onClick={() => setProfileOpen(true)}
-                className="topbar-profile-btn"
-                title="Account profile"
-              >
-                <span className="avatar !w-5 !h-5 !text-[10px] font-semibold bg-primary text-primary-foreground">
-                  {userInitial}
-                </span>
-                <span className="hidden sm:inline font-normal truncate max-w-[120px]">
-                  {userName}
-                </span>
-              </button>
-            ) : (
-              <Link to="/login" className="no-underline">
-                <button type="button" className="topbar-profile-btn" title="Sign in" aria-label="Sign in">
-                  <UserRound size={13} />
-                  <span className="hidden sm:inline">Sign in</span>
-                </button>
-              </Link>
-            )}
           </div>
         </header>
 

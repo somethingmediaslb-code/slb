@@ -39,7 +39,7 @@ export function LoginPage() {
   const [showForgot, setShowForgot] = useState(false);
   const [infoNotice, setInfoNotice] = useState('');
   const navigate = useNavigate();
-  const { user, isPendingVerification } = useFactory();
+  const { user, isPendingVerification, isRoleLoading } = useFactory();
 
   // Detect URL auth errors (e.g. OAuth errors)
   useState(() => {
@@ -134,22 +134,6 @@ export function LoginPage() {
 
       if (signInError) throw signInError;
 
-      // Ensure profile record exists in profiles table
-      if (signInData?.user) {
-        try {
-          const userMeta = signInData.user.user_metadata || {};
-          const displayName = userMeta['display_name'] || userMeta['full_name'] || email.trim().split('@')[0];
-          await supabase.from('profiles').upsert({
-            id: signInData.user.id,
-            email: email.trim(),
-            display_name: displayName,
-            full_name: userMeta['full_name'] || displayName,
-          }, { onConflict: 'id' });
-        } catch {
-          // Non-blocking: background trigger also guarantees profile
-        }
-      }
-
       toast.success('Signed in successfully');
       navigate({ to: '/' });
     } catch (err: unknown) {
@@ -187,6 +171,15 @@ export function LoginPage() {
       setResetting(false);
     }
   };
+
+  if (user && isRoleLoading) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 bg-background text-foreground">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-xs text-muted-foreground font-medium">Verifying workspace permissions…</p>
+      </div>
+    );
+  }
 
   if (user && isPendingVerification) {
     return <PendingVerificationPage />;
@@ -382,7 +375,7 @@ export function SignupPage() {
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [signedUpPending, setSignedUpPending] = useState(false);
   const navigate = useNavigate();
-  const { user, isPendingVerification } = useFactory();
+  const { user, isPendingVerification, isRoleLoading } = useFactory();
 
   const handleGoogleSignUp = async () => {
     setBusy(true);
@@ -475,19 +468,7 @@ export function SignupPage() {
         console.warn('Auto confirm:', confirmErr);
       }
 
-      // 3. Upsert profile record
-      if (data?.user) {
-        try {
-          await supabase.from('profiles').upsert({
-            id: data.user.id,
-            email: emailVal,
-            full_name: nameVal,
-            display_name: nameVal,
-          }, { onConflict: 'id' });
-        } catch {}
-      }
-
-      // 4. Ensure session is active immediately
+      // 3. Ensure session is active immediately
       if (!data?.session) {
         const { error: signInErr } = await supabase.auth.signInWithPassword({
           email: emailVal,
@@ -514,6 +495,15 @@ export function SignupPage() {
       setBusy(false);
     }
   };
+
+  if (user && isRoleLoading && !signedUpPending) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 bg-background text-foreground">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        <p className="text-xs text-muted-foreground font-medium">Verifying workspace permissions…</p>
+      </div>
+    );
+  }
 
   if (signedUpPending || (user && isPendingVerification)) {
     return <PendingVerificationPage />;

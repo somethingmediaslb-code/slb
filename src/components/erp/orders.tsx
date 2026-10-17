@@ -1,18 +1,204 @@
-import {useState, useEffect} from 'react';
+import {useState, useEffect, useRef} from 'react';
 import {useSearch} from '@tanstack/react-router';
-import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,MessageCircle,Share2} from 'lucide-react';
+import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline,WhatsAppIcon} from './common';
 import {money,number,dateLabel,today,downloadCsv,type Row} from '@/lib/erp-data';
 
-const freshLine=(sr:number=1)=>({sr_no:sr,box_type:'',code_remarks:'',size_dimensions:'',specification:'',ordered_qty:1,unit_rate:0,priority_signal:'Yellow'});
+const freshLine=(sr:number=1)=>({sr_no:sr,box_type:'',code_remarks:'',size_dimensions:'',specification:'',ordered_qty:'' as unknown as number,unit_rate:'' as unknown as number,priority_signal:'Yellow'});
 
-export function sendOrderWhatsApp(order: Row<'orders'>, items: Row<'order_items'>[], party?: Row<'party_master'> | null) {
+function BoxTypePicker({
+  value,
+  onChange,
+  catalog,
+  required,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  catalog: Row<'item_master'>[];
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close when tapping or clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent | TouchEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [open]);
+
+  // Filter catalog items by search query
+  const query = value.trim().toLowerCase();
+  const filtered = catalog.filter(c =>
+    c.box_type.toLowerCase().includes(query)
+  );
+
+  // Show up to 10 options at a time
+  const visibleOptions = (filtered.length > 0 ? filtered : catalog).slice(0, 10);
+
+  const handleSelect = (boxType: string) => {
+    onChange(boxType);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className={`relative w-full ${open ? 'z-50' : 'z-0'}`}>
+      {/* Attached Textfield Area */}
+      <div
+        className={`relative flex items-center w-full transition-all duration-150 ${
+          open
+            ? 'rounded-t-lg rounded-b-none border border-primary border-b-border/30 bg-background'
+            : 'rounded-lg'
+        }`}
+      >
+        <input
+          required={required}
+          value={value}
+          placeholder="Search or enter box type…"
+          autoComplete="off"
+          className={`w-full pr-10 ${
+            open
+              ? 'rounded-t-lg rounded-b-none border-0 focus:ring-0 focus:outline-none shadow-none'
+              : ''
+          }`}
+          onFocus={() => {
+            setOpen(true);
+            setHighlightedIndex(0);
+          }}
+          onChange={e => {
+            onChange(e.target.value);
+            if (!open) setOpen(true);
+            setHighlightedIndex(0);
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Escape') {
+              setOpen(false);
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              if (!open) {
+                setOpen(true);
+              } else if (visibleOptions.length > 0) {
+                setHighlightedIndex(prev => (prev + 1) % visibleOptions.length);
+              }
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              if (open && visibleOptions.length > 0) {
+                setHighlightedIndex(prev => (prev - 1 + visibleOptions.length) % visibleOptions.length);
+              }
+            } else if (e.key === 'Enter') {
+              const selectedItem = visibleOptions[highlightedIndex];
+              if (open && selectedItem) {
+                e.preventDefault();
+                handleSelect(selectedItem.box_type);
+              }
+            }
+          }}
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="Toggle box types dropdown"
+          onClick={() => setOpen(prev => !prev)}
+          className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+        >
+          <ChevronDown
+            className={`w-4 h-4 transition-transform duration-200 ${
+              open ? 'rotate-180 text-primary' : ''
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Dropdown: Opens just below the textfield area, attached & curved */}
+      {open && (
+        <div
+          className="absolute top-full left-0 right-0 z-50 -mt-px bg-card text-card-foreground border border-t-0 border-primary rounded-b-xl shadow-2xl overflow-hidden animate-in fade-in-0 duration-150"
+        >
+          {/* Instruction Bar: Search for a specific box type */}
+          <div className="px-3.5 py-1.5 bg-muted/40 border-b border-border/70 flex items-center justify-between text-xs text-muted-foreground select-none">
+            <span className="flex items-center gap-1.5 font-medium text-[11px] text-muted-foreground">
+              <Search className="w-3 h-3 text-primary shrink-0" />
+              <span>Search for a specific box type</span>
+            </span>
+            <span className="text-[10px] font-mono text-muted-foreground/80">
+              {visibleOptions.length} of {catalog.length}
+            </span>
+          </div>
+
+          {/* Options List (Strictly box type name, nothing else) */}
+          <div className="max-h-56 overflow-y-auto divide-y divide-border/20">
+            {filtered.length > 0 ? (
+              visibleOptions.map((item, idx) => {
+                const isSelected = item.box_type.toLowerCase() === value.trim().toLowerCase();
+                const isHighlighted = idx === highlightedIndex;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      handleSelect(item.box_type);
+                    }}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
+                    className={`w-full text-left px-3.5 py-2.5 text-sm transition-colors flex items-center justify-between cursor-pointer ${
+                      isSelected
+                        ? 'bg-primary text-primary-foreground font-medium'
+                        : isHighlighted
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-foreground hover:bg-accent/60'
+                    }`}
+                  >
+                    <span className="truncate">{item.box_type}</span>
+                    {isSelected && (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-current ml-2" />
+                    )}
+                  </button>
+                );
+              })
+            ) : catalog.length > 0 ? (
+              <div className="p-3.5 text-center text-xs text-muted-foreground select-none">
+                <div>No configured box type matches &quot;{value}&quot;</div>
+                <div className="mt-1 text-[11px] text-primary font-medium">
+                  Will use custom: &quot;{value}&quot;
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 text-center text-xs text-muted-foreground select-none">
+                No configured box types yet.
+              </div>
+            )}
+          </div>
+
+          {/* Footer instruction if there are more than 10 options */}
+          {filtered.length > 10 && (
+            <div className="px-3 py-1.5 bg-muted/20 border-t border-border/50 text-[11px] text-muted-foreground text-center select-none">
+              Type in textfield to refine search ({filtered.length - 10} more available)
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function sendOrderWhatsApp(order: Row<'orders'>, items: Row<'order_items'>[], party?: Row<'party_master'> | null) {
   const companyName = order.is_self_stock ? 'Self Stocking' : (party?.company_name || 'Customer');
   const phone = party?.phone_number ? party.phone_number.replace(/\D/g, '') : '';
 
@@ -277,9 +463,6 @@ export function Orders(){
                         >
                           <div className="deals-card-top">
                             <div className="flex items-center gap-2 min-w-0">
-                              <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
-                                {o.is_self_stock ? 'SS' : company(o.party_id).slice(0, 2).toUpperCase()}
-                              </span>
                               <div className="min-w-0">
                                 <div className="deals-card-title truncate">
                                   {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
@@ -303,10 +486,6 @@ export function Orders(){
                           <div className="deals-card-metric">
                             <span className="text-muted-foreground">{number(ordered)} boxes</span>
                             <strong>{money(value)}</strong>
-                          </div>
-
-                          <div>
-                            <SegmentedMeter value={completed} total={ordered} />
                           </div>
 
                           <div className="deals-card-footer">
@@ -346,7 +525,6 @@ export function Orders(){
                   <th>Due Date</th>
                   <th className="numeric">Units</th>
                   <th className="numeric">Order Value</th>
-                  <th>Fulfilment</th>
                   <th>Status</th>
                   <th className="w-8 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
@@ -370,12 +548,7 @@ export function Orders(){
                       </td>
                       <td className="font-medium text-foreground">{o.order_no}</td>
                       <td>
-                        <div className="flex items-center gap-2.5">
-                          <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
-                            {o.is_self_stock ? 'SS' : company(o.party_id).slice(0,2).toUpperCase()}
-                          </span>
-                          <span className="font-medium text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
-                        </div>
+                        <span className="font-medium text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
                       </td>
                       <td>
                         <div className="flex items-center gap-1.5 whitespace-nowrap">
@@ -399,9 +572,6 @@ export function Orders(){
                       <td className="text-xs text-muted-foreground whitespace-nowrap">{dateLabel(o.expected_date)}</td>
                       <td className="numeric font-medium">{number(ordered)}</td>
                       <td className="numeric font-medium text-foreground">{money(value)}</td>
-                      <td>
-                        <SegmentedMeter value={completed} total={ordered} />
-                      </td>
                       <td><Pill value={o.status}/></td>
                       <td className="text-right" onClick={e=>e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
@@ -412,7 +582,7 @@ export function Orders(){
                             title="Send Order Details to WhatsApp"
                             onClick={()=>sendOrderWhatsApp(o,items,d.parties.find(p=>p.id===o.party_id))}
                           >
-                            <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400"/>
+                            <WhatsAppIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400"/>
                           </Button>
                           <Button
                             variant="ghost"
@@ -428,7 +598,7 @@ export function Orders(){
                     </tr>
                   );
                 }) : (
-                  <Empty columns={11} label="No matching orders found"/>
+                  <Empty columns={10} label="No matching orders found"/>
                 )}
               </tbody>
               <tfoot>
@@ -441,9 +611,6 @@ export function Orders(){
                   </td>
                   <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {money(totalValue)}
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">
-                    {number(totalCompleted)} produced
                   </td>
                   <td colSpan={2} />
                 </tr>
@@ -468,9 +635,6 @@ export function Orders(){
                   <div className="mobile-card-top">
                     <div className="mobile-card-title-group">
                       <div className="flex items-center gap-2">
-                        <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
-                          {o.is_self_stock ? 'SS' : company(o.party_id).slice(0, 2).toUpperCase()}
-                        </span>
                         <div className="mobile-card-title">
                           {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
                         </div>
@@ -501,18 +665,9 @@ export function Orders(){
                       <span className="mobile-card-label">Due Date</span>
                       <span className="mobile-card-value">{dateLabel(o.expected_date)}</span>
                     </div>
-                    <div className="mobile-card-field">
-                      <span className="mobile-card-label">Fulfilment</span>
-                      <span className="mobile-card-value">
-                        {ordered > 0 ? Math.round((completed / ordered) * 100) : 0}%
-                      </span>
-                    </div>
                   </div>
 
-                  <div className="mobile-card-actions">
-                    <div className="flex-1">
-                      <SegmentedMeter value={completed} total={ordered} />
-                    </div>
+                  <div className="mobile-card-actions justify-end">
                     <button
                       type="button"
                       className="crm-btn crm-btn-secondary !h-7 !text-xs !px-3"
@@ -575,9 +730,6 @@ export function Orders(){
                   <div className="drawer-section-label">Account Summary</div>
                   <div className="p-3.5 bg-background border border-border rounded-lg flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <span className="avatar !w-8 !h-8 !text-xs font-semibold bg-accent">
-                        {activeOrder.is_self_stock ? 'SS' : company(activeOrder.party_id).slice(0, 2).toUpperCase()}
-                      </span>
                       <div>
                         <span className="text-sm font-medium text-foreground block">
                           {activeOrder.is_self_stock ? 'Internal Factory Stock' : company(activeOrder.party_id)}
@@ -734,7 +886,7 @@ export function Orders(){
                     className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
                     onClick={() => sendOrderWhatsApp(activeOrder, activeItems, activeParty)}
                   >
-                    <MessageCircle className="w-3.5 h-3.5 mr-1" />
+                    <WhatsAppIcon className="w-3.5 h-3.5 mr-1" />
                     Share WhatsApp
                   </Button>
                   <Button variant="secondary" size="sm" onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}>
@@ -823,21 +975,27 @@ export function Orders(){
                   </div>
                   <div className="form-grid">
                     <label>
-                      Box Type
-                      <input
-                        list="catalog-items"
+                      <span className="flex items-center justify-between mb-1">
+                        <span>Box Type</span>
+                        {d.catalog.length > 0 && (
+                          <span className="text-[11px] text-muted-foreground font-normal">
+                            ({d.catalog.length} configured)
+                          </span>
+                        )}
+                      </span>
+                      <BoxTypePicker
                         required
                         value={l.box_type}
-                        placeholder="Select or enter box type"
-                        onChange={e=>{
-                          const catalog=d.catalog.find(i=>i.box_type===e.target.value);
+                        catalog={d.catalog}
+                        onChange={val => {
+                          const catalog = d.catalog.find(i => i.box_type.toLowerCase() === val.toLowerCase()) || d.catalog.find(i => i.box_type === val);
                           setLines(lines.map((x,i)=>i===index?{
                             ...x,
-                            box_type:e.target.value,
+                            box_type: val,
                             ...(catalog?{
-                              size_dimensions:catalog.size_dimensions,
-                              specification:catalog.specification??'',
-                              unit_rate:catalog.unit_rate
+                              size_dimensions: catalog.size_dimensions,
+                              specification: catalog.specification ?? '',
+                              unit_rate: catalog.unit_rate
                             }:{})
                           }:x));
                         }}
@@ -868,8 +1026,9 @@ export function Orders(){
                         inputMode="numeric"
                         min={1}
                         required
-                        value={l.ordered_qty}
-                        onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,ordered_qty:Number(e.target.value)}:x))}
+                        placeholder="e.g. 100"
+                        value={!l.ordered_qty ? '' : l.ordered_qty}
+                        onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,ordered_qty:e.target.value===''?'' as unknown as number:Number(e.target.value)}:x))}
                       />
                     </label>
                     <label>
@@ -880,8 +1039,9 @@ export function Orders(){
                         min={0}
                         step=".01"
                         required={!stock}
-                        value={l.unit_rate}
-                        onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,unit_rate:Number(e.target.value)}:x))}
+                        placeholder="e.g. 250.00"
+                        value={!l.unit_rate ? '' : l.unit_rate}
+                        onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,unit_rate:e.target.value===''?'' as unknown as number:Number(e.target.value)}:x))}
                       />
                     </label>
                     <label>
@@ -913,10 +1073,6 @@ export function Orders(){
                 <Plus className="w-4 h-4 mr-1"/> Add Another Item
               </Button>
             </div>
-
-            <datalist id="catalog-items">
-              {d.catalog.map(i=><option key={i.id} value={i.box_type}/>)}
-            </datalist>
 
             {/* Live Form Summary Banner */}
             <div className="form-calc-banner">

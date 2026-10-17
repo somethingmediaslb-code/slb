@@ -276,10 +276,7 @@ export function Profile(){
       <Heading title="Account Profile"/>
 
       {/* User Identity Banner (CRM Style) */}
-      <div className="p-6 bg-card border border-border rounded-xl mb-6 flex items-center gap-5">
-        <div className="w-16 h-16 rounded-full bg-primary text-primary-foreground font-semibold text-xl grid place-items-center flex-shrink-0">
-          {initials}
-        </div>
+      <div className="p-6 bg-card border border-border rounded-xl mb-6">
         <div>
           <h2 className="text-lg font-medium leading-tight">
             {currentDisplayName}
@@ -287,9 +284,6 @@ export function Profile(){
           <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
           <div className="flex items-center gap-2 mt-2">
             <span className="pill uppercase text-[10px] tracking-wide font-semibold">{userRole || 'Workspace Member'}</span>
-            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-success"/> Database Profile Active
-            </span>
           </div>
         </div>
       </div>

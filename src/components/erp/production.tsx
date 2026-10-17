@@ -19,15 +19,19 @@ export function Production(){
   const pageSize=10;
   const [selected,setSelected]=useState<Row<'order_items'>|null>(null);
   const [completeItem,setCompleteItem]=useState<Row<'order_items'>|null>(null);
-  const [completeQty,setCompleteQty]=useState(0);
-  const [qty,setQty]=useState(1);
-  const [rate,setRate]=useState(0);
+  const [completeQty,setCompleteQty]=useState<number|''>('');
+  const [qty,setQty]=useState<number|''>(1);
+  const [rate,setRate]=useState<number|''>('');
   const [hours,setHours]=useState(1);
   const [start,setStart]=useState(new Date().toISOString().slice(0,16));
   const [busy,setBusy]=useState(false);
 
-  // Compute pending items (where ordered > allocated)
-  const pendingItems=d.items.filter(i=>i.ordered_qty>i.allocated_qty);
+  // Compute pending items: active orders where items are not yet fully completed
+  const pendingItems=d.items.filter(i=>{
+    const o=d.orders.find(ord=>ord.id===i.order_id);
+    if(o && (o.status==='Completed'||o.status==='Cancelled'))return false;
+    return i.completed_qty < i.ordered_qty;
+  });
   const redCount=pendingItems.filter(i=>i.priority_signal==='Red').length;
   const yellowCount=pendingItems.filter(i=>i.priority_signal==='Yellow').length;
   const greenCount=pendingItems.filter(i=>i.priority_signal==='Green').length;
@@ -66,11 +70,13 @@ export function Production(){
     if(!selected)return;
     setBusy(true);
     const f=new FormData(e.currentTarget);
+    const numQty = Number(qty) || 0;
+    const numRate = Number(rate) || 0;
     const ok=await action('allocate',{
       order_item_id:selected.id,
       labour_id:String(f.get('labour_id')),
-      allocated_qty:qty,
-      labour_rate:rate,
+      allocated_qty:numQty,
+      labour_rate:numRate,
       duration_hours:hours,
       start_time:new Date(start).toISOString()
     });
@@ -87,10 +93,11 @@ export function Production(){
       setSelected(null);
       return;
     }
+    const enteredQty = completeQty === '' ? 0 : Number(completeQty);
     setBusy(true);
     const ok=await action('complete',{
       id:primaryAlloc.id,
-      completed_qty:Math.min(completeQty, completeItem.allocated_qty)
+      completed_qty:Math.min(enteredQty, completeItem.allocated_qty)
     });
     setBusy(false);
     if(ok)setCompleteItem(null);
@@ -163,25 +170,25 @@ export function Production(){
           <tbody>
             {paginated.length ? paginated.map(i=>{
               const o=d.orders.find(o=>o.id===i.order_id);
-              const remaining=i.ordered_qty-i.allocated_qty;
+              const unallocated=Math.max(0, i.ordered_qty-i.allocated_qty);
               const partyName=o?.is_self_stock ? 'Self Stocking' : d.parties.find(p=>p.id===o?.party_id)?.company_name ?? '—';
-              const monogram=o?.is_self_stock ? 'SS' : partyName.slice(0,2).toUpperCase();
               return (
                 <tr key={i.id} className="clickable-row" onClick={()=>{
-                  setSelected(i);
-                  setQty(remaining);
+                  if (unallocated > 0) {
+                    setSelected(i);
+                    setQty(unallocated);
+                    setRate('');
+                  } else if (i.allocated_qty > i.completed_qty) {
+                    setCompleteItem(i);
+                    setCompleteQty('');
+                  }
                 }}>
                   <td onClick={e=>e.stopPropagation()}>
                     <Checkbox aria-label={`Select ${i.box_type}`} />
                   </td>
                   <td className="font-medium text-foreground">{o?.order_no || '—'}</td>
                   <td>
-                    <div className="flex items-center gap-2.5">
-                      <span className="avatar !w-6 !h-6 !text-[10px] font-semibold">
-                        {monogram}
-                      </span>
-                      <span className="font-medium text-foreground">{partyName}</span>
-                    </div>
+                    <span className="font-medium text-foreground">{partyName}</span>
                   </td>
                   <td>
                     <div className="flex items-center gap-2">
@@ -192,30 +199,37 @@ export function Production(){
                   <td className="numeric font-medium">{number(i.ordered_qty)}</td>
                   <td className="numeric text-muted-foreground">{number(i.allocated_qty)}</td>
                   <td className="numeric text-emerald-500 font-medium">{number(i.completed_qty)}</td>
-                  <td className="numeric font-medium text-foreground">{number(remaining)}</td>
+                  <td className="numeric font-medium text-foreground">{number(unallocated)}</td>
                   <td>
-                    <SegmentedMeter value={i.allocated_qty} total={i.ordered_qty} />
+                    <SegmentedMeter value={i.completed_qty} total={i.ordered_qty} />
                   </td>
                   <td><Pill value={i.priority_signal}/></td>
                   <td className="text-right" onClick={e=>e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={()=>{
-                          setSelected(i);
-                          setQty(remaining);
-                        }}
-                      >
-                        <UserPlus className="w-3.5 h-3.5 mr-1"/> Assign Labour
-                      </Button>
+                      {unallocated > 0 ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={()=>{
+                            setSelected(i);
+                            setQty(unallocated);
+                            setRate('');
+                          }}
+                        >
+                          <UserPlus className="w-3.5 h-3.5 mr-1"/> Assign Labour
+                        </Button>
+                      ) : (
+                        <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                          Allocated
+                        </span>
+                      )}
                       {i.allocated_qty > i.completed_qty && (
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={()=>{
                             setCompleteItem(i);
-                            setCompleteQty(i.completed_qty);
+                            setCompleteQty('');
                           }}
                         >
                           Complete
@@ -256,23 +270,25 @@ export function Production(){
       <div className="mobile-card-view">
         {paginated.length ? paginated.map(i => {
           const o = d.orders.find(o => o.id === i.order_id);
-          const remaining = i.ordered_qty - i.allocated_qty;
+          const unallocated = Math.max(0, i.ordered_qty - i.allocated_qty);
           const partyName = o?.is_self_stock ? 'Self Stocking' : d.parties.find(p => p.id === o?.party_id)?.company_name ?? '—';
-          const monogram = o?.is_self_stock ? 'SS' : partyName.slice(0, 2).toUpperCase();
           return (
             <div
               key={i.id}
               className="mobile-record-card"
               onClick={() => {
-                setSelected(i);
-                setQty(remaining);
+                if (unallocated > 0) {
+                  setSelected(i);
+                  setQty(unallocated);
+                  setRate('');
+                } else if (i.allocated_qty > i.completed_qty) {
+                  setCompleteItem(i);
+                  setCompleteQty('');
+                }
               }}
             >
               <div className="mobile-card-top">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="avatar !w-6 !h-6 !text-[10px] font-semibold flex-shrink-0">
-                    {monogram}
-                  </span>
                   <div className="min-w-0">
                     <div className="mobile-card-title">{partyName}</div>
                     <div className="mobile-card-sub">{o?.order_no || '—'} · {i.box_type}</div>
@@ -300,25 +316,40 @@ export function Production(){
                 </div>
                 <div className="mobile-card-field">
                   <span className="mobile-card-label">Remaining</span>
-                  <span className="mobile-card-value">{number(remaining)}</span>
+                  <span className="mobile-card-value">{number(unallocated)}</span>
                 </div>
               </div>
 
               <div className="mobile-card-actions">
                 <div className="flex-1">
-                  <SegmentedMeter value={i.allocated_qty} total={i.ordered_qty} />
+                  <SegmentedMeter value={i.completed_qty} total={i.ordered_qty} />
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelected(i);
-                    setQty(remaining);
-                  }}
-                >
-                  Assign Labour
-                </Button>
+                {unallocated > 0 ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelected(i);
+                      setQty(unallocated);
+                      setRate('');
+                    }}
+                  >
+                    Assign Labour
+                  </Button>
+                ) : i.allocated_qty > i.completed_qty ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCompleteItem(i);
+                      setCompleteQty('');
+                    }}
+                  >
+                    Complete
+                  </Button>
+                ) : null}
               </div>
             </div>
           );
@@ -349,8 +380,9 @@ export function Production(){
           <form onSubmit={submit}>
             {(() => {
               const pendingPoQty = selected ? selected.ordered_qty - selected.allocated_qty : 0;
-              const exceedsPending = qty > pendingPoQty;
-              const remainingAfterAssign = Math.max(0, pendingPoQty - qty);
+              const numQty = typeof qty === 'number' ? qty : Number(qty) || 0;
+              const exceedsPending = numQty > pendingPoQty;
+              const remainingAfterAssign = Math.max(0, pendingPoQty - numQty);
               const partyName = selectedOrder?.is_self_stock ? 'Self Stocking' : (d.parties.find(p => p.id === selectedOrder?.party_id)?.company_name ?? '—');
 
               return (
@@ -411,12 +443,12 @@ export function Production(){
                   
                   {exceedsPending && (
                     <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs text-destructive space-y-1 mb-4">
-                      <strong className="font-semibold block">⚠️ Assigned quantity ({number(qty)}) exceeds actual pending PO quantity ({number(pendingPoQty)} boxes)</strong>
+                      <strong className="font-semibold block">⚠️ Assigned quantity ({number(numQty)}) exceeds actual pending PO quantity ({number(pendingPoQty)} boxes)</strong>
                       <p>You cannot allocate more than the pending PO balance. If you need to produce more, please add or increase the quantity in the Order Entry PO first.</p>
                     </div>
                   )}
 
-                  {!exceedsPending && qty > 0 && qty < pendingPoQty && (
+                  {!exceedsPending && numQty > 0 && numQty < pendingPoQty && (
                     <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-600 dark:text-blue-400 flex items-center justify-between mb-4">
                       <span>Remaining unassigned PO quantity after this allocation:</span>
                       <strong className="font-semibold">{number(remainingAfterAssign)} boxes</strong>
@@ -444,8 +476,8 @@ export function Production(){
                         min={1}
                         max={pendingPoQty}
                         required
-                        value={qty}
-                        onChange={e=>setQty(Number(e.target.value))}
+                        value={qty === '' ? '' : qty}
+                        onChange={e=>setQty(e.target.value === '' ? '' : Number(e.target.value))}
                       />
                     </label>
 
@@ -455,9 +487,9 @@ export function Production(){
                         type="number"
                         min={0}
                         step=".01"
-                        required
-                        value={rate}
-                        onChange={e=>setRate(Number(e.target.value))}
+                        placeholder="e.g. 15.00"
+                        value={rate === 0 || rate === '' ? '' : rate}
+                        onChange={e=>setRate(e.target.value === '' ? '' : Number(e.target.value))}
                       />
                     </label>
 
@@ -494,14 +526,14 @@ export function Production(){
                       </strong>
                     </div>
                     <div className="text-right">
-                      <span className="text-muted-foreground block text-xs">Total Labour Price ({number(qty)} × ₹{rate})</span>
-                      <strong className="text-foreground font-semibold text-base">{money(qty*rate)}</strong>
+                      <span className="text-muted-foreground block text-xs">Total Labour Price ({number(Number(qty)||0)} × ₹{rate || '0.00'})</span>
+                      <strong className="text-foreground font-semibold text-base">{money((Number(qty)||0)*(Number(rate)||0))}</strong>
                     </div>
                   </div>
 
                   <div className="form-actions">
                     <Button variant="outline" type="button" onClick={()=>setSelected(null)}>Cancel</Button>
-                    <Button type="submit" disabled={busy || exceedsPending || qty <= 0}>
+                    <Button type="submit" disabled={busy || exceedsPending || numQty <= 0}>
                       {busy ? 'Assigning…' : 'Confirm Allocation'}
                     </Button>
                   </div>
@@ -527,9 +559,10 @@ export function Production(){
                   type="number"
                   min={completeItem?.completed_qty ?? 0}
                   max={completeItem?.allocated_qty ?? 0}
+                  placeholder={`Max ${completeItem?.allocated_qty ?? 0}`}
                   required
-                  value={completeQty}
-                  onChange={e=>setCompleteQty(Number(e.target.value))}
+                  value={completeQty === '' ? '' : completeQty}
+                  onChange={e=>setCompleteQty(e.target.value === '' ? '' : Number(e.target.value))}
                 />
               </label>
             </div>

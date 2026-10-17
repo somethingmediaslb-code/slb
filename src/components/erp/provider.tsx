@@ -127,8 +127,7 @@ const tables = {
   borrowings: 'labour_borrowings',
   payroll: 'labour_payroll',
   notifications: 'factory_notifications',
-  profiles: 'profiles',
-  roles: 'user_roles'
+  profiles: 'profiles'
 } as const;
 
 async function readFactory(): Promise<FactoryData> {
@@ -168,6 +167,7 @@ interface Context {
   userRole: AppRole | null;
   isAdmin: boolean;
   isPendingVerification: boolean;
+  isRoleLoading: boolean;
   userAllowedPages: string[];
   hasPageAccess: (pageKey: string) => boolean;
   hasCapability: (capability: string) => boolean;
@@ -189,31 +189,21 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
   const [authInitialized, setAuthInitialized] = useState(false);
   const [serverRole, setServerRole] = useState<AppRole | null>(null);
   const [serverAllowedPages, setServerAllowedPages] = useState<string[] | null>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
   const cache = useQueryClient();
 
   const loadRole = async (uid: string) => {
-    try {
-      const { data: roleRow } = await supabase
-        .from('user_roles')
-        .select('role, allowed_pages')
-        .eq('user_id', uid)
-        .maybeSingle();
-
-      if (roleRow?.role) {
-        setServerRole(roleRow.role as AppRole);
-        setServerAllowedPages((roleRow.allowed_pages as string[] | undefined) || null);
-        return;
-      }
-    } catch {}
-
     try {
       const { fetchUserRoleStatus } = await import('@/lib/auth.functions');
       const res = await fetchUserRoleStatus({ data: { userId: uid } });
       if (res.success && res.role) {
         setServerRole(res.role as AppRole);
         setServerAllowedPages(res.allowedPages);
+        setLocalRole(uid, res.role);
       }
-    } catch {}
+    } catch {} finally {
+      setRoleLoaded(true);
+    }
   };
 
   useEffect(() => {
@@ -222,6 +212,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     } else {
       setServerRole(null);
       setServerAllowedPages(null);
+      setRoleLoaded(false);
     }
   }, [user?.id]);
 
@@ -265,6 +256,8 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
       isPendingVerification = true;
     }
   }
+
+  const isRoleLoading = Boolean(user && !roleLoaded && !serverRole && !(user.user_metadata?.['role']) && !(getLocalRoles()[user.id]));
 
   // Only query factory data when user is authenticated and not pending verification
   const query = useQuery({
@@ -444,6 +437,7 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
         userRole,
         isAdmin,
         isPendingVerification,
+        isRoleLoading,
         userAllowedPages,
         hasPageAccess,
         hasCapability,

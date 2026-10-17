@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as BoxTypesRouteImport } from './routes/box-types'
 import { Route as DispatchRouteImport } from './routes/dispatch'
 import { Route as ExpensesRouteImport } from './routes/expenses'
 import { Route as ItemsRouteImport } from './routes/items'
@@ -39,6 +40,11 @@ const AdminRoute = AdminRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BoxTypesRoute = BoxTypesRouteImport.update({
+  id: '/box-types',
+  path: '/box-types',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DispatchRoute = DispatchRouteImport.update({
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/box-types': typeof BoxTypesRoute
   '/dispatch': typeof DispatchRoute
   '/expenses': typeof ExpensesRoute
   '/items': typeof ItemsRoute
@@ -129,6 +136,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/box-types': typeof BoxTypesRoute
   '/dispatch': typeof DispatchRoute
   '/expenses': typeof ExpensesRoute
   '/items': typeof ItemsRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
+  '/box-types': typeof BoxTypesRoute
   '/dispatch': typeof DispatchRoute
   '/expenses': typeof ExpensesRoute
   '/items': typeof ItemsRoute
@@ -168,6 +177,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
+    | '/box-types'
     | '/dispatch'
     | '/expenses'
     | '/items'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
+    | '/box-types'
     | '/dispatch'
     | '/expenses'
     | '/items'
@@ -204,6 +215,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
+    | '/box-types'
     | '/dispatch'
     | '/expenses'
     | '/items'
@@ -223,6 +235,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
+  BoxTypesRoute: typeof BoxTypesRoute
   DispatchRoute: typeof DispatchRoute
   ExpensesRoute: typeof ExpensesRoute
   ItemsRoute: typeof ItemsRoute
@@ -259,6 +272,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/box-types': {
+      id: '/box-types'
+      path: '/box-types'
+      fullPath: '/box-types'
+      preLoaderRoute: typeof BoxTypesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dispatch': {
@@ -359,6 +379,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
+  BoxTypesRoute: BoxTypesRoute,
   DispatchRoute: DispatchRoute,
   ExpensesRoute: ExpensesRoute,
   ItemsRoute: ItemsRoute,
