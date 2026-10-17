@@ -193,6 +193,20 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
 
   const loadRole = async (uid: string) => {
     try {
+      const { data: roleRow } = await supabase
+        .from('user_roles')
+        .select('role, allowed_pages')
+        .eq('user_id', uid)
+        .maybeSingle();
+
+      if (roleRow?.role) {
+        setServerRole(roleRow.role as AppRole);
+        setServerAllowedPages((roleRow.allowed_pages as string[] | undefined) || null);
+        return;
+      }
+    } catch {}
+
+    try {
       const { fetchUserRoleStatus } = await import('@/lib/auth.functions');
       const res = await fetchUserRoleStatus({ data: { userId: uid } });
       if (res.success && res.role) {
