@@ -28,14 +28,13 @@ import {
   Moon,
   BarChart3,
   KeyRound,
-  Plus,
   MoreHorizontal,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {Popover,PopoverContent,PopoverTrigger} from '@/components/ui/popover';
 import {useFactory} from './provider';
-import {SegmentedMeter} from './common';
+import {SegmentedMeter,clearModalSearchParams} from './common';
 import {money} from '@/lib/erp-data';
 import {supabase} from '@/integrations/supabase/client';
 import {PendingVerificationPage} from './pending-verification';
@@ -420,18 +419,6 @@ export function AppShell({children}:{children:ReactNode}){
     document.title = currentTitle ? `${currentTitle} | SLBW` : 'SLBW';
   }
 
-  const getFabAction = () => {
-    if (path.startsWith('/orders')) return { to: '/orders' as const, search: { new: true }, title: 'New Order' };
-    if (path.startsWith('/production')) return { to: '/orders' as const, search: { new: true }, title: 'New Production Run' };
-    if (path.startsWith('/dispatch')) return { to: '/dispatch' as const, search: { new: true }, title: 'New Challan' };
-    if (path.startsWith('/parties')) return { to: '/parties' as const, search: { new: true }, title: 'New Party' };
-    if (path.startsWith('/box-types') || path.startsWith('/items')) return { to: '/box-types' as const, search: { new: true }, title: 'New Box Type' };
-    if (path.startsWith('/labour')) return { to: '/labour' as const, search: { new: true }, title: 'New Labour' };
-    if (path.startsWith('/expenses')) return { to: '/expenses' as const, search: { new: true }, title: 'New Expense' };
-    return { to: '/orders' as const, search: { new: true }, title: 'New Order' };
-  };
-  const fab = getFabAction();
-
   return (
     <div className={`app-shell ${collapsed ? 'collapsed' : ''}`} data-collapsed={collapsed ? "true" : "false"}>
       <div className={'mobile-scrim '+(open?'open':'')} onClick={()=>setOpen(false)}/>
@@ -797,20 +784,6 @@ export function AppShell({children}:{children:ReactNode}){
           )}
         </main>
 
-        {/* Mobile Floating Action Button (FAB) */}
-        {user && !isPageDenied && (
-          <Link
-            to={fab.to}
-            search={fab.search}
-            className="mobile-fab md:hidden"
-            title={fab.title}
-            aria-label={fab.title}
-            onClick={() => setOpen(false)}
-          >
-            <Plus size={22} className="stroke-[2.5]" />
-          </Link>
-        )}
-
         {/* Mobile Fixed Bottom Tab Bar */}
         <nav className="mobile-bottom-bar md:hidden" aria-label="Mobile Navigation">
           <Link
@@ -872,7 +845,7 @@ export function AppShell({children}:{children:ReactNode}){
       </div>
 
       {/* Slide-over My Profile Sheet */}
-      <Sheet open={profileOpen} onOpenChange={setProfileOpen}>
+      <Sheet open={profileOpen} onOpenChange={(open)=>{ setProfileOpen(open); if(!open) clearModalSearchParams(); }}>
         <SheetContent side="right" className="sm:max-w-md w-full p-0 flex flex-col bg-card overflow-hidden">
           {user && (
             <>

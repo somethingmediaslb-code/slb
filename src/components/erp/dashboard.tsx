@@ -1,8 +1,14 @@
 import {useState} from 'react';
-import {Link} from '@tanstack/react-router';
+import {Link, useNavigate} from '@tanstack/react-router';
 import {Bell,ArrowUpRight,ClipboardList,Factory,Truck,IndianRupee,CalendarDays,Plus,ChevronRight,TrendingUp} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem
+} from '@/components/ui/dropdown-menu';
 import {useFactory} from './provider';
 import {Heading,Empty,ExportButton,Pill,CrmTag,SegmentedMeter,Pagination,ThemedSelect} from './common';
 import {finance,money,number,dateLabel,downloadCsv} from '@/lib/erp-data';
@@ -11,6 +17,7 @@ import {toast} from 'sonner';
 import {ResponsiveContainer,BarChart,Bar,XAxis,YAxis,Tooltip,CartesianGrid} from 'recharts';
 
 export function Dashboard(){
+  const navigate = useNavigate();
   const {data:d,user,signIn}=useFactory();
   const [period,setPeriod]=useState('This month');
   const [pushBusy,setPushBusy]=useState(false);
@@ -20,20 +27,32 @@ export function Dashboard(){
   const report=finance(d);
   const allRecentOrders=d.orders.slice().sort((a,b)=>(b.created_at??'').localeCompare(a.created_at??''));
   const paginatedOrders=allRecentOrders.slice((orderPage-1)*orderPageSize, orderPage*orderPageSize);
-  const pending=d.items.reduce((s,i)=>s+i.ordered_qty-i.allocated_qty,0);
-  const ready=d.items.reduce((s,i)=>s+i.completed_qty-i.dispatched_qty-i.reserved_qty,0);
+  const pending = d.items.reduce((s, i) => {
+    const o = d.orders.find(ord => ord.id === i.order_id);
+    if (o && (o.status === 'Completed' || o.status === 'Cancelled')) return s;
+    return s + Math.max(0, i.ordered_qty - i.allocated_qty);
+  }, 0);
+  const ready = d.items.reduce((s, i) => {
+    const o = d.orders.find(ord => ord.id === i.order_id);
+    if (o && o.status === 'Cancelled') return s;
+    return s + Math.max(0, i.completed_qty - i.dispatched_qty - (i.reserved_qty || 0));
+  }, 0);
   const profit=report.reduce((s,r)=>s+r.profit,0);
   const totalOrders=d.orders.length;
 
   // Real period calculations
   const now = new Date();
   const isThisWeek = period === 'This week';
+  const isThisYear = period === 'This year';
   const currentPeriodOrders = d.orders.filter(o => {
     if (!o.order_date) return false;
     const od = new Date(o.order_date);
     if (isThisWeek) {
       const diffDays = (now.getTime() - od.getTime()) / (1000 * 3600 * 24);
       return diffDays >= 0 && diffDays <= 7;
+    }
+    if (isThisYear) {
+      return od.getFullYear() === now.getFullYear();
     }
     return od.getMonth() === now.getMonth() && od.getFullYear() === now.getFullYear();
   }).length;
@@ -44,6 +63,9 @@ export function Dashboard(){
     if (isThisWeek) {
       const diffDays = (now.getTime() - od.getTime()) / (1000 * 3600 * 24);
       return diffDays > 7 && diffDays <= 14;
+    }
+    if (isThisYear) {
+      return od.getFullYear() === now.getFullYear() - 1;
     }
     const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     return od.getMonth() === prevMonthDate.getMonth() && od.getFullYear() === prevMonthDate.getFullYear();
@@ -61,6 +83,9 @@ export function Dashboard(){
       const diffDays = (now.getTime() - dd.getTime()) / (1000 * 3600 * 24);
       return diffDays >= 0 && diffDays <= 7;
     }
+    if (isThisYear) {
+      return dd.getFullYear() === now.getFullYear();
+    }
     return dd.getMonth() === now.getMonth() && dd.getFullYear() === now.getFullYear();
   }).reduce((s, r) => s + r.profit, 0);
 
@@ -70,6 +95,9 @@ export function Dashboard(){
     if (isThisWeek) {
       const diffDays = (now.getTime() - dd.getTime()) / (1000 * 3600 * 24);
       return diffDays > 7 && diffDays <= 14;
+    }
+    if (isThisYear) {
+      return dd.getFullYear() === now.getFullYear() - 1;
     }
     const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     return dd.getMonth() === prevMonthDate.getMonth() && dd.getFullYear() === prevMonthDate.getFullYear();
@@ -97,18 +125,25 @@ export function Dashboard(){
     return {...stage,count,strokeDash,offset};
   });
 
-  const chart=Array.from({length:period==='This week'?7:6},(_,i)=>{
-    const chartDate=new Date();
-    if(period==='This week') chartDate.setDate(chartDate.getDate()-6+i);
-    else chartDate.setMonth(chartDate.getMonth()-5+i);
+  const chartLength = isThisWeek ? 7 : isThisYear ? 12 : 6;
+  const chart=Array.from({length:chartLength},(_,i)=>{
+    let chartDate=new Date();
+    if(isThisWeek) {
+      chartDate.setDate(chartDate.getDate()-6+i);
+    } else if(isThisYear) {
+      chartDate = new Date(now.getFullYear(), i, 1);
+    } else {
+      chartDate.setMonth(chartDate.getMonth()-5+i);
+    }
     const matches=(value:string)=>{
       const date=new Date(value);
-      return period==='This week'
-        ? date.toDateString()===chartDate.toDateString()
-        : date.getMonth()===chartDate.getMonth()&&date.getFullYear()===chartDate.getFullYear();
+      if(isThisWeek) {
+        return date.toDateString()===chartDate.toDateString();
+      }
+      return date.getMonth()===chartDate.getMonth()&&date.getFullYear()===chartDate.getFullYear();
     };
     return {
-      month:chartDate.toLocaleDateString('en-US',period==='This week'?{weekday:'short'}:{month:'short'}),
+      month:chartDate.toLocaleDateString('en-US',isThisWeek?{weekday:'short'}:{month:'short'}),
       ordered:d.orders.filter(o=>matches(o.order_date)).length,
       dispatched:d.challans.filter(c=>c.status==='Dispatched'&&matches(c.dispatch_date)).length
     };
@@ -131,11 +166,20 @@ export function Dashboard(){
   return (
     <>
       <Heading title="Dashboard">
-        <Button variant="outline" size="sm" onClick={()=>setPeriod(period==='This month'?'This week':'This month')}>
-          <CalendarDays className="w-3.5 h-3.5 mr-1"/>
-          {period}
-          <ChevronRight className="w-3.5 h-3.5 ml-1"/>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm">
+              <CalendarDays className="w-3.5 h-3.5 mr-1"/>
+              {period}
+              <ChevronRight className="w-3.5 h-3.5 ml-1"/>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={()=>setPeriod('This week')}>This week</DropdownMenuItem>
+            <DropdownMenuItem onClick={()=>setPeriod('This month')}>This month</DropdownMenuItem>
+            <DropdownMenuItem onClick={()=>setPeriod('This year')}>This year</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Button size="sm" asChild>
           <Link to="/orders" search={{new:true}}>
             <Plus className="w-3.5 h-3.5 mr-1"/>New Order
@@ -146,10 +190,10 @@ export function Dashboard(){
       {!pushGranted && (
         <div className="notification-banner">
           <div className="banner-title">
-            <Bell size={18}/>
+            <Bell size={18} className="shrink-0 text-primary mt-0.5" />
             <span>Real-time dispatch and production push updates available for mobile</span>
           </div>
-          <Button variant="outline" size="sm" disabled={pushBusy} onClick={push}>
+          <Button variant="outline" size="sm" className="w-full sm:w-auto shrink-0 justify-center" disabled={pushBusy} onClick={push}>
             {pushBusy?'Enabling…':'Enable notifications'}
             <ArrowUpRight className="w-3.5 h-3.5 ml-1"/>
           </Button>
@@ -195,8 +239,9 @@ export function Dashboard(){
               value={period}
               onChange={setPeriod}
               options={[
+                { value: 'This week', label: 'This week' },
                 { value: 'This month', label: 'This month' },
-                { value: 'This week', label: 'This week' }
+                { value: 'This year', label: 'This year' }
               ]}
             />
           </div>
@@ -207,7 +252,7 @@ export function Dashboard(){
             </div>
             {d.orders.length ? (
               <ResponsiveContainer width="100%" height={190}>
-                <BarChart data={chart} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} barGap={6}>
+                <BarChart data={chart} margin={{ top: 10, right: 10, left: -16, bottom: 0 }} barGap={4}>
                   <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} opacity={0.5} />
                   <XAxis dataKey="month" tick={{fill:'var(--muted-foreground)',fontSize:11}} axisLine={{stroke:'var(--border)',opacity:0.4}} tickLine={false}/>
                   <YAxis allowDecimals={false} tickCount={5} tick={{fill:'var(--muted-foreground)',fontSize:11}} axisLine={false} tickLine={false}/>
@@ -239,8 +284,8 @@ export function Dashboard(){
                       );
                     }}
                   />
-                  <Bar dataKey="ordered" fill="var(--primary)" radius={[3,3,0,0]} maxBarSize={28}/>
-                  <Bar dataKey="dispatched" fill="var(--muted-foreground)" opacity={0.65} radius={[3,3,0,0]} maxBarSize={28}/>
+                  <Bar dataKey="ordered" fill="var(--primary)" radius={[3,3,0,0]} maxBarSize={isThisYear ? 16 : 22}/>
+                  <Bar dataKey="dispatched" fill="var(--muted-foreground)" opacity={0.65} radius={[3,3,0,0]} maxBarSize={isThisYear ? 16 : 22}/>
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -335,7 +380,6 @@ export function Dashboard(){
                 <th>Customer / Account</th>
                 <th>Order Date</th>
                 <th className="numeric">Quantity</th>
-                <th>Fulfilment</th>
                 <th>Priority</th>
                 <th>Status</th>
                 <th className="w-8"/>
@@ -345,12 +389,15 @@ export function Dashboard(){
               {paginatedOrders.length ? paginatedOrders.map(o=>{
                 const items=d.items.filter(i=>i.order_id===o.id);
                 const totalQty=items.reduce((s,i)=>s+i.ordered_qty,0);
-                const completedQty=items.reduce((s,i)=>s+i.completed_qty,0);
                 const partyName=o.is_self_stock ? 'Self Stocking' : d.parties.find(p=>p.id===o.party_id)?.company_name ?? '—';
-                const monogram=o.is_self_stock ? 'SS' : partyName.slice(0,2).toUpperCase();
                 return (
-                  <tr key={o.id} className="clickable-row">
-                    <td>
+                  <tr
+                    key={o.id}
+                    className="clickable-row"
+                    onClick={() => navigate({ to: '/orders', search: { view: o.id } })}
+                    title="Click to view order details"
+                  >
+                    <td onClick={e=>e.stopPropagation()}>
                       <Checkbox aria-label={`Select ${o.order_no}`} />
                     </td>
                     <td className="font-medium text-foreground">{o.order_no}</td>
@@ -361,14 +408,11 @@ export function Dashboard(){
                     </td>
                     <td>{dateLabel(o.order_date)}</td>
                     <td className="numeric font-medium">{number(totalQty)}</td>
-                    <td>
-                      <SegmentedMeter value={completedQty} total={totalQty} />
-                    </td>
                     <td><Pill value={items[0]?.priority_signal ?? 'Yellow'}/></td>
                     <td><Pill value={o.status}/></td>
-                    <td>
+                    <td className="w-8" onClick={e=>e.stopPropagation()}>
                       <Button variant="ghost" size="icon-sm" asChild>
-                        <Link to="/orders" aria-label="View order">
+                        <Link to="/orders" search={{ view: o.id }} aria-label="View order">
                           <ArrowUpRight className="w-4 h-4"/>
                         </Link>
                       </Button>
@@ -376,7 +420,7 @@ export function Dashboard(){
                   </tr>
                 );
               }) : (
-                <Empty columns={9} label="No orders received yet"/>
+                <Empty columns={8} label="No orders received yet"/>
               )}
             </tbody>
           </table>
@@ -387,12 +431,13 @@ export function Dashboard(){
           {paginatedOrders.length ? paginatedOrders.map(o => {
             const items = d.items.filter(i => i.order_id === o.id);
             const totalQty = items.reduce((s, i) => s + i.ordered_qty, 0);
-            const completedQty = items.reduce((s, i) => s + i.completed_qty, 0);
             const partyName = o.is_self_stock ? 'Self Stocking' : d.parties.find(p => p.id === o.party_id)?.company_name ?? '—';
-            const monogram = o.is_self_stock ? 'SS' : partyName.slice(0, 2).toUpperCase();
-            const fulfilment = totalQty > 0 ? Math.round((completedQty / totalQty) * 100) : 0;
             return (
-              <div key={o.id} className="mobile-record-card">
+              <div
+                key={o.id}
+                className="mobile-record-card cursor-pointer"
+                onClick={() => navigate({ to: '/orders', search: { view: o.id } })}
+              >
                 <div className="mobile-card-top">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="min-w-0">
@@ -413,8 +458,8 @@ export function Dashboard(){
                     <span className="mobile-card-value font-medium">{number(totalQty)}</span>
                   </div>
                   <div className="mobile-card-field">
-                    <span className="mobile-card-label">Fulfilment</span>
-                    <span className="mobile-card-value">{fulfilment}%</span>
+                    <span className="mobile-card-label">Priority</span>
+                    <span className="mobile-card-value"><Pill value={items[0]?.priority_signal ?? 'Yellow'}/></span>
                   </div>
                   <div className="mobile-card-field">
                     <span className="mobile-card-label">Items Count</span>
@@ -422,12 +467,10 @@ export function Dashboard(){
                   </div>
                 </div>
 
-                <div className="mobile-card-actions">
-                  <div className="flex-1">
-                    <SegmentedMeter value={completedQty} total={totalQty} />
-                  </div>
+                <div className="mobile-card-actions" onClick={e => e.stopPropagation()}>
+                  <div className="flex-1" />
                   <Button variant="outline" size="sm" asChild>
-                    <Link to="/orders">
+                    <Link to="/orders" search={{ view: o.id }}>
                       View <ArrowUpRight className="w-3.5 h-3.5 ml-1"/>
                     </Link>
                   </Button>

@@ -2,15 +2,85 @@ import type { Database } from '@/integrations/supabase/types';
 export type Row<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
 export interface FactoryData { parties:Row<'party_master'>[]; catalog:Row<'item_master'>[]; orders:Row<'orders'>[]; items:Row<'order_items'>[]; workers:Row<'labour_master'>[]; allocations:Row<'production_allocations'>[]; challans:Row<'delivery_challans'>[]; challanItems:Row<'challan_items'>[]; expenses:Row<'expenses'>[]; borrowings:Row<'labour_borrowings'>[]; payroll:Row<'labour_payroll'>[]; notifications:Row<'factory_notifications'>[]; roles:Row<'user_roles'>[]; profiles:Row<'profiles'>[]; }
 export const emptyData:FactoryData={parties:[],catalog:[],orders:[],items:[],workers:[],allocations:[],challans:[],challanItems:[],expenses:[],borrowings:[],payroll:[],notifications:[],roles:[],profiles:[]};
-export const money=(n?:number|null)=>(n===null||n===undefined)?'—':new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(n);
-export const number=(n:number)=>new Intl.NumberFormat('en-IN').format(n);
-export const today=()=>new Date().toISOString().slice(0,10);
-export const dateLabel=(value:string)=>new Date(value).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-export function finance(d:FactoryData) {
- const dispatched=d.challans.filter(c=>c.status==='Dispatched');
- const shared=d.expenses.filter(e=>!e.reference_dc_id && e.category !== 'Labour Borrowing').reduce((s,e)=>s+(e.amount||0),0);
- const totalQty=d.challanItems.filter(i=>dispatched.some(c=>c.id===i.challan_id)).reduce((s,i)=>s+i.dispatched_qty,0);
- return dispatched.map(c=>{const lines=d.challanItems.filter(i=>i.challan_id===c.id); const qty=lines.reduce((s,i)=>s+i.dispatched_qty,0); const revenue=lines.reduce((s,i)=>s+i.dispatched_qty*(d.items.find(x=>x.id===i.order_item_id)?.unit_rate??0),0); const labour=lines.reduce((s,i)=>s+(i.direct_labour_cost||0),0);const expenses=d.expenses.filter(e=>e.reference_dc_id===c.id && e.category !== 'Labour Borrowing').reduce((s,e)=>s+(e.amount||0),0)+(totalQty?shared*qty/totalQty:0); const profit=revenue-labour-(c.freight_charges||0)-expenses;return {...c,qty,revenue,labour,expenses,profit,margin:revenue?profit/revenue*100:0};});
+export const money = (n?: number | null) =>
+  (n === null || n === undefined || isNaN(Number(n)))
+    ? '—'
+    : new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(Number(n));
+
+export const number = (n?: number | null) =>
+  (n === null || n === undefined || isNaN(Number(n)))
+    ? '0'
+    : new Intl.NumberFormat('en-IN').format(Number(n));
+
+export const formatLocalDate = (d: Date = new Date()): string => {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+export const localDateTime = (d: Date = new Date()): string => {
+  const pad = (v: number) => String(v).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+export const today = () => formatLocalDate();
+
+export const dateLabel = (value?: string | null): string => {
+  if (!value) return '—';
+  // Handle YYYY-MM-DD cleanly without timezone offset shift
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
+    const [y, m, d] = value.trim().split('-').map(Number);
+    if (y && m && d) {
+      const dt = new Date(y, m - 1, d);
+      return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+  }
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+
+export function finance(d: FactoryData) {
+  const dispatched = d.challans.filter(c => c.status === 'Dispatched');
+  const shared = d.expenses.filter(e => !e.reference_dc_id && e.category !== 'Labour Borrowing').reduce((s, e) => s + (e.amount || 0), 0);
+  const totalQty = d.challanItems.filter(i => dispatched.some(c => c.id === i.challan_id)).reduce((s, i) => s + i.dispatched_qty, 0);
+  return dispatched.map(c => {
+    const lines = d.challanItems.filter(i => i.challan_id === c.id);
+    const qty = lines.reduce((s, i) => s + i.dispatched_qty, 0);
+    const revenue = lines.reduce((s, i) => s + i.dispatched_qty * (d.items.find(x => x.id === i.order_item_id)?.unit_rate ?? 0), 0);
+    const labour = lines.reduce((s, i) => s + (i.direct_labour_cost || 0), 0);
+    const expenses = d.expenses.filter(e => e.reference_dc_id === c.id && e.category !== 'Labour Borrowing').reduce((s, e) => s + (e.amount || 0), 0) + (totalQty ? (shared * qty) / totalQty : 0);
+    const profit = revenue - labour - (c.freight_charges || 0) - expenses;
+    const rawMargin = revenue > 0 ? (profit / revenue) * 100 : 0;
+    return { ...c, qty, revenue, labour, expenses, profit, margin: Number.isFinite(rawMargin) ? rawMargin : 0 };
+  });
 }
-export function downloadCsv(name:string,rows:Record<string,unknown>[]){const keys=Object.keys(rows[0]??{});const text=[keys,...rows.map(r=>keys.map(k=>r[k]??''))].map(r=>r.map(v=>'"'+String(v).replaceAll('"','""')+'"').join(',')).join('\n');const url=URL.createObjectURL(new Blob([text],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download=name+'.csv';a.click();URL.revokeObjectURL(url);}
-export function meta(title:string,description:string){return {meta:[{title:title+' | SLBW'},{name:'description',content:description},{property:'og:title',content:title+' | SLBW'},{property:'og:description',content:description},{property:'og:type',content:'website'},{name:'twitter:card',content:'summary_large_image'}]};}
+
+export function downloadCsv(name: string, rows: Record<string, unknown>[]) {
+  if (!rows || !rows.length) {
+    if (typeof window !== 'undefined') {
+      import('sonner').then(({ toast }) => toast.info('No data records available to export.'));
+    }
+    return;
+  }
+  const keys = Object.keys(rows[0] ?? {});
+  const text = [keys, ...rows.map(r => keys.map(k => r[k] ?? ''))]
+    .map(r => r.map(v => '"' + String(v).replaceAll('"', '""') + '"').join(','))
+    .join('\n');
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function meta(title: string, description: string) {
+  return {
+    meta: [
+      { title: title + ' | SLBW' },
+      { name: 'description', content: description },
+      { property: 'og:title', content: title + ' | SLBW' },
+      { property: 'og:description', content: description },
+      { property: 'og:type', content: 'website' },
+      { name: 'twitter:card', content: 'summary_large_image' }
+    ]
+  };
+}

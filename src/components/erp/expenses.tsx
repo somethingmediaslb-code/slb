@@ -1,14 +1,17 @@
 import {VolumeCharts} from './volume-charts';
 import {useState, useEffect} from 'react';
+import {useNavigate, useSearch} from '@tanstack/react-router';
 import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory} from './provider';
-import {Heading,AccessNotice,Empty,SearchFilter,ExportButton,AddButton,Pagination,DateFilterPill,FilterToken,ThemedSelect,ThemedDatePicker} from './common';
+import {Heading,AccessNotice,Empty,SearchFilter,ExportButton,AddButton,Pagination,DateFilterPill,FilterToken,ThemedSelect,ThemedDatePicker,clearModalSearchParams} from './common';
 import {supabase} from '@/integrations/supabase/client';
-import {money,finance,dateLabel,today,downloadCsv} from '@/lib/erp-data';
+import {money,finance,dateLabel,today,downloadCsv,formatLocalDate} from '@/lib/erp-data';
 import {toast} from 'sonner';
 export function Expenses(){
   const {data:d,user,signIn,refresh,action}=useFactory();
+  const navigate=useNavigate();
+  const searchParams=useSearch({strict:false}) as {new?:boolean};
   const [tab,setTab]=useState('Expenses');
   const [open,setOpen]=useState(false);
   const [search,setSearch]=useState('');
@@ -20,6 +23,20 @@ export function Expenses(){
   const [busy,setBusy]=useState(false);
   const [page,setPage]=useState(1);
   const pageSize=10;
+
+  useEffect(()=>{
+    if(searchParams.new&&user){
+      setOpen(true);
+      clearModalSearchParams(navigate);
+    }
+  },[searchParams.new,user]);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      clearModalSearchParams(navigate);
+    }
+  };
 
   const company=(orderId:string)=>{
     const o=d.orders.find(o=>o.id===orderId);
@@ -33,17 +50,17 @@ export function Expenses(){
       setFrom('');
       setTo('');
     }else if(preset==='Day'){
-      const todayStr=now.toISOString().slice(0,10);
+      const todayStr=formatLocalDate(now);
       setFrom(todayStr);
       setTo(todayStr);
     }else if(preset==='Week'){
-      const weekAgo=new Date(now.getTime()-7*86400000).toISOString().slice(0,10);
+      const weekAgo=formatLocalDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
       setFrom(weekAgo);
-      setTo(now.toISOString().slice(0,10));
+      setTo(formatLocalDate(now));
     }else if(preset==='Month'){
-      const firstOfMonth=new Date(now.getFullYear(),now.getMonth(),1).toISOString().slice(0,10);
+      const firstOfMonth=formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
       setFrom(firstOfMonth);
-      setTo(now.toISOString().slice(0,10));
+      setTo(formatLocalDate(now));
     }
   };
 
@@ -124,12 +141,12 @@ export function Expenses(){
         <SearchFilter value={search} onChange={setSearch}/>
         
         {/* Day/Week/Month Preset Shortcuts */}
-        <div className="flex items-center gap-1 bg-secondary/60 p-0.5 rounded-full text-xs">
+        <div className="flex items-center gap-1 bg-card border border-border p-0.5 rounded-lg text-xs h-8 shadow-xs">
           {(['All', 'Day', 'Week', 'Month'] as const).map(r => (
             <button
               key={r}
               type="button"
-              className={`px-3 py-1 rounded-full font-medium transition-colors ${rangePreset === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${rangePreset === r ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
               onClick={() => setPreset(r)}
             >
               {r === 'All' ? 'All Time' : `This ${r}`}
@@ -417,7 +434,7 @@ export function Expenses(){
 
       {tab==='Reports'&&<VolumeCharts dispatch/>}
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle>{tab==='Borrowings'?'Record labour borrowing':'Add expense'}</DialogTitle>
           <form onSubmit={submit}>

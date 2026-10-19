@@ -4,8 +4,8 @@ import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {MasterPage} from './masters';
 import {useFactory} from './provider';
-import {Empty,Pill,Pagination,DateFilterPill,FilterToken,ExportButton,ThemedSelect,ThemedDatePicker} from './common';
-import {money,number,dateLabel,downloadCsv,type Row} from '@/lib/erp-data';
+import {Empty,Pill,Pagination,DateFilterPill,FilterToken,ExportButton,ThemedSelect,ThemedDatePicker,clearModalSearchParams} from './common';
+import {money,number,dateLabel,downloadCsv,today,type Row} from '@/lib/erp-data';
 export function Labour(){
   const {data:d,action,isAdmin}=useFactory();
   const [selected,setSelected]=useState<Row<'production_allocations'>|null>(null);
@@ -121,12 +121,12 @@ export function Labour(){
         <div className="section-header flex items-center justify-between gap-4">
           <h2>Production Allocations & Productivity Tracking</h2>
           <div className="flex items-center gap-1.5 flex-wrap">
-            <div className="flex items-center gap-1 bg-secondary/60 p-0.5 rounded-full text-xs">
+            <div className="flex items-center gap-1 bg-card border border-border p-0.5 rounded-lg text-xs h-8 shadow-xs">
               {(['All', 'Day', 'Week', 'Month', 'Custom'] as const).map(r => (
                 <button
                   key={r}
                   type="button"
-                  className={`px-3 py-1 rounded-full font-medium transition-colors ${prodRange === r ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${prodRange === r ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
                   onClick={() => { setProdRange(r); setAllocPage(1); }}
                 >
                   {r === 'All' ? 'All Time' : r === 'Custom' ? 'Custom Range' : `This ${r}`}
@@ -590,7 +590,7 @@ export function Labour(){
 
       <VolumeCharts/>
 
-      <Dialog open={!!selected} onOpenChange={()=>setSelected(null)}>
+      <Dialog open={!!selected} onOpenChange={(open)=>{ if(!open){ setSelected(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle>Record Production Completion</DialogTitle>
           <div className="form-subtitle">
@@ -619,7 +619,7 @@ export function Labour(){
       </Dialog>
 
       {/* Record Borrowing Dialog */}
-      <Dialog open={borrowModalOpen} onOpenChange={setBorrowModalOpen}>
+      <Dialog open={borrowModalOpen} onOpenChange={(open)=>{ setBorrowModalOpen(open); if(!open) clearModalSearchParams(); }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Record Worker Borrowing / Advance</DialogTitle>
           <div className="form-subtitle">
@@ -641,7 +641,7 @@ export function Labour(){
               </label>
               <label>
                 Borrowing Date
-                <ThemedDatePicker name="borrow_date" defaultValue={new Date().toISOString().slice(0, 10)} required />
+                <ThemedDatePicker name="borrow_date" defaultValue={today()} required />
               </label>
               <label>
                 Amount (₹)
@@ -661,7 +661,7 @@ export function Labour(){
       </Dialog>
 
       {/* Individual Labour Statement Dialog */}
-      <Dialog open={!!statementWorker} onOpenChange={()=>setStatementWorker(null)}>
+      <Dialog open={!!statementWorker} onOpenChange={(open)=>{ if(!open){ setStatementWorker(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide max-w-2xl" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Individual Labour Statement</DialogTitle>
           {statementWorker && (() => {
@@ -780,7 +780,7 @@ export function Labour(){
       </Dialog>
 
       {/* Record Payment Dialog */}
-      <Dialog open={!!paymentModalPayroll} onOpenChange={() => setPaymentModalPayroll(null)}>
+      <Dialog open={!!paymentModalPayroll} onOpenChange={(open)=>{ if(!open){ setPaymentModalPayroll(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Record Payroll Payment</DialogTitle>
           <div className="form-subtitle">
@@ -831,7 +831,7 @@ export function Labour(){
                     Disbursement Date
                     <ThemedDatePicker
                       name="disbursed_at"
-                      defaultValue={new Date().toISOString().slice(0, 10)}
+                      defaultValue={today()}
                       required
                     />
                   </label>

@@ -1,13 +1,13 @@
 import {useState, useEffect, useRef} from 'react';
-import {useSearch} from '@tanstack/react-router';
-import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search} from 'lucide-react';
+import {useSearch, useNavigate} from '@tanstack/react-router';
+import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search,Download,Check,Ban} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline,WhatsAppIcon} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline,WhatsAppIcon,clearModalSearchParams,BoxDimensionInput} from './common';
 import {money,number,dateLabel,today,downloadCsv,type Row} from '@/lib/erp-data';
 
 const freshLine=(sr:number=1)=>({sr_no:sr,box_type:'',code_remarks:'',size_dimensions:'',specification:'',ordered_qty:'' as unknown as number,unit_rate:'' as unknown as number,priority_signal:'Yellow'});
@@ -236,7 +236,8 @@ function sendOrderWhatsApp(order: Row<'orders'>, items: Row<'order_items'>[], pa
 
 export function Orders(){
   const {data:d,user,signIn,action,isAdmin}=useFactory();
-  const searchParams=useSearch({strict:false}) as {new?:boolean};
+  const navigate=useNavigate();
+  const searchParams=useSearch({strict:false}) as {new?:boolean; view?:string};
   const [open,setOpen]=useState(false);
   const [viewMode,setViewMode]=useState<'list'|'board'>('list');
   const [search,setSearch]=useState('');
@@ -247,6 +248,7 @@ export function Orders(){
   const pageSize=10;
   const [stock,setStock]=useState(false);
   const [lines,setLines]=useState([freshLine()]);
+  const [orderDate,setOrderDate]=useState(today());
   const [busy,setBusy]=useState(false);
   const [viewOrderId,setViewOrderId]=useState<string|null>(null);
   const [closeShortOrderId,setCloseShortOrderId]=useState<string|null>(null);
@@ -254,8 +256,30 @@ export function Orders(){
   const [closeShortBusy,setCloseShortBusy]=useState(false);
 
   useEffect(()=>{
-    if(searchParams.new&&user)setOpen(true);
-  },[searchParams.new,user]);
+    if(searchParams.new&&user){
+      setOpen(true);
+      setOrderDate(today());
+      clearModalSearchParams(navigate);
+    }
+    if(searchParams.view){
+      setViewOrderId(searchParams.view);
+    }
+  },[searchParams.new,searchParams.view,user]);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      clearModalSearchParams(navigate);
+      setOrderDate(today());
+    }
+  };
+
+  const handleViewOrderChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setViewOrderId(null);
+      clearModalSearchParams(navigate);
+    }
+  };
 
   function add(){
     if(!user){signIn();return;}
@@ -264,31 +288,35 @@ export function Orders(){
     setOpen(true);
   }
 
-  const company=(id:string|null)=>d.parties.find(p=>p.id===id)?.company_name??'—';
+  const company = (id: string | null, isStock?: boolean) =>
+    isStock ? 'Self Stocking' : (d.parties.find(p => p.id === id)?.company_name ?? '—');
 
-  // Compute status counts for ViewTabs
-  const pendingCount=d.orders.filter(o=>o.status==='Pending').length;
-  const prodCount=d.orders.filter(o=>o.status==='In Production').length;
-  const partDispCount=d.orders.filter(o=>o.status==='Partially Dispatched').length;
-  const dispCount=d.orders.filter(o=>o.status==='Dispatched').length;
-  const doneCount=d.orders.filter(o=>o.status==='Completed').length;
+  // Base filtered by active search, party, and channel/medium filters
+  const baseFiltered = d.orders.filter(o => {
+    const matchesParty = partyFilter === 'All' || (o.is_self_stock && partyFilter === 'self') || o.party_id === partyFilter;
+    const matchesMedium = mediumFilter === 'All' || o.medium === mediumFilter;
+    const compName = company(o.party_id, o.is_self_stock);
+    const matchesSearch = (o.order_no + ' ' + compName + ' ' + (o.remarks ?? '')).toLowerCase().includes(search.toLowerCase());
+    return matchesParty && matchesMedium && matchesSearch;
+  });
 
-  const tabs=[
-    {id:'All',label:'All Orders',count:d.orders.length},
-    {id:'Pending',label:'Pending',count:pendingCount},
-    {id:'In Production',label:'In Production',count:prodCount},
-    {id:'Partially Dispatched',label:'Partially Dispatched',count:partDispCount},
-    {id:'Dispatched',label:'Dispatched',count:dispCount},
-    {id:'Completed',label:'Completed',count:doneCount},
+  // Dynamic status counts for ViewTabs based on active filter criteria
+  const pendingCount = baseFiltered.filter(o => o.status === 'Pending').length;
+  const prodCount = baseFiltered.filter(o => o.status === 'In Production').length;
+  const partDispCount = baseFiltered.filter(o => o.status === 'Partially Dispatched').length;
+  const dispCount = baseFiltered.filter(o => o.status === 'Dispatched').length;
+  const doneCount = baseFiltered.filter(o => o.status === 'Completed').length;
+
+  const tabs = [
+    { id: 'All', label: 'All Orders', count: baseFiltered.length },
+    { id: 'Pending', label: 'Pending', count: pendingCount },
+    { id: 'In Production', label: 'In Production', count: prodCount },
+    { id: 'Partially Dispatched', label: 'Partially Dispatched', count: partDispCount },
+    { id: 'Dispatched', label: 'Dispatched', count: dispCount },
+    { id: 'Completed', label: 'Completed', count: doneCount },
   ];
 
-  const filtered=d.orders.filter(o=>{
-    const matchesTab=statusTab==='All'||o.status===statusTab;
-    const matchesParty=partyFilter==='All'||(o.is_self_stock&&partyFilter==='self')||o.party_id===partyFilter;
-    const matchesMedium=mediumFilter==='All'||o.medium===mediumFilter;
-    const matchesSearch=(o.order_no+' '+company(o.party_id)+' '+(o.remarks??'')).toLowerCase().includes(search.toLowerCase());
-    return matchesTab&&matchesParty&&matchesMedium&&matchesSearch;
-  });
+  const filtered = baseFiltered.filter(o => statusTab === 'All' || o.status === statusTab);
 
   useEffect(() => {
     setPage(1);
@@ -330,6 +358,10 @@ export function Orders(){
         toast.error(`Item #${i+1}: Please select or enter a box type.`);
         return;
       }
+      if(!l.size_dimensions || !l.size_dimensions.trim()){
+        toast.error(`Item #${i+1}: Please specify complete box dimensions (Length × Width × Height).`);
+        return;
+      }
       if(Number(l.ordered_qty)<=0){
         toast.error(`Item #${i+1}: Quantity must be at least 1.`);
         return;
@@ -367,6 +399,8 @@ export function Orders(){
   const activeCompletedQty=activeItems.reduce((s,i)=>s+i.completed_qty,0);
   const activeDispatchedQty=activeItems.reduce((s,i)=>s+i.dispatched_qty,0);
   const activeTotalValue=activeItems.reduce((s,i)=>s+(i.total_price??0),0);
+  const activePendingQty=Math.max(0, activeTotalQty - activeCompletedQty);
+  const activeProductionPercent=activeTotalQty > 0 ? Math.min(100, Math.round((activeCompletedQty / activeTotalQty) * 100)) : 0;
 
   // Form live preview values
   const formTotalUnits=lines.reduce((s,l)=>s+(Number(l.ordered_qty)||0),0);
@@ -438,7 +472,7 @@ export function Orders(){
               <div key={stage} className="deals-column">
                 <div className="deals-column-header">
                   <div className="deals-column-title">
-                    <span className={`pill ${stage}`} />
+                    <span className={cn('pill', `pill-${stage.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)} data-status={stage} />
                     <span>{stage}</span>
                     <span className="deals-column-count">{stageOrders.length}</span>
                   </div>
@@ -696,204 +730,282 @@ export function Orders(){
 
 
       {/* Slide-over Inspection Sheet (CRM Details Drawer - Screenshot 5) */}
-      <Sheet open={!!viewOrderId} onOpenChange={open=>!open&&setViewOrderId(null)}>
-        <SheetContent side="right" className="sm:max-w-xl w-full p-0 flex flex-col bg-card overflow-hidden h-full max-h-screen">
+      <Sheet open={!!viewOrderId} onOpenChange={handleViewOrderChange}>
+        <SheetContent side="right" className="sm:max-w-xl w-full p-0 flex flex-col bg-card overflow-hidden h-[100dvh] max-h-[100dvh] inset-y-0 right-0">
           {activeOrder && (
             <>
-              <div className="p-6 pr-14 border-b border-border bg-background">
+              <div className="p-4 sm:p-6 pr-14 border-b border-border bg-background shrink-0">
                 <SheetHeader className="text-left">
                   <div className="drawer-hero-box">
                     <div className="drawer-hero-monogram">
                       {activeOrder.is_self_stock ? 'SS' : company(activeOrder.party_id).slice(0, 2).toUpperCase()}
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        <SheetTitle className="text-xl font-medium tracking-tight">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <SheetTitle className="text-lg sm:text-xl font-medium tracking-tight">
                           {activeOrder.order_no}
                         </SheetTitle>
                         <Pill value={activeOrder.status} />
                       </div>
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <CrmTag label={activeOrder.is_self_stock ? 'Self Stocking' : company(activeOrder.party_id)} variant="blue" />
+                        <CrmTag label={activeOrder.is_self_stock ? 'Internal Factory Stock' : company(activeOrder.party_id)} variant="blue" />
                         {activeItems[0]?.specification && <CrmTag label={activeItems[0].specification} variant="purple" />}
-                        {activeOrder.medium && <CrmTag label={activeOrder.medium} variant="green" />}
-                        {activeItems[0]?.priority_signal === 'Red' && <CrmTag label="High Priority" variant="red" />}
+                        {activeItems.some(i => i.priority_signal === 'Red') && <CrmTag label="High Priority" variant="red" />}
                       </div>
                     </div>
                   </div>
                 </SheetHeader>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Account Summary */}
+              <div
+                className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 sm:space-y-6"
+                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              >
+                {/* Operational Production & Dispatch State */}
                 <div>
-                  <div className="drawer-section-label">Account Summary</div>
-                  <div className="p-3.5 bg-background border border-border rounded-lg flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
+                  <div className="drawer-section-label">Production & Dispatch State</div>
+                  <div className="p-4 bg-background border border-border rounded-xl space-y-4 shadow-sm">
+                    {/* Overall Progress */}
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-2">
+                        <span className="font-semibold text-foreground flex items-center gap-1.5">
+                          <Package className="w-4 h-4 text-primary" />
+                          Production Completion
+                        </span>
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {activeProductionPercent}% Produced
+                        </span>
+                      </div>
+                      <div className="w-full h-2.5 rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                          style={{ width: `${activeProductionPercent}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center text-[11px] text-muted-foreground mt-1.5">
+                        <span>{number(activeCompletedQty)} of {number(activeTotalQty)} units produced</span>
+                        <span>{number(activePendingQty)} units pending in queue</span>
+                      </div>
+                    </div>
+
+                    {/* Operational 4-Card Metrics Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 pt-2 border-t border-border/70">
+                      <div className="p-2.5 sm:p-3 bg-secondary/30 border border-border/60 rounded-lg">
+                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
+                          Total Ordered
+                        </div>
+                        <div className="text-base sm:text-lg font-bold text-foreground tabular-nums">
+                          {number(activeTotalQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 sm:p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
+                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-medium mb-1">
+                          Produced
+                        </div>
+                        <div className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                          {number(activeCompletedQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 sm:p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-medium mb-1">
+                          Pending Prod.
+                        </div>
+                        <div className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                          {number(activePendingQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 sm:p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-medium mb-1">
+                          Dispatched
+                        </div>
+                        <div className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">
+                          {number(activeDispatchedQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order Details & Schedule */}
+                <div>
+                  <div className="drawer-section-label">Order Details & Schedule</div>
+                  <div className="p-4 bg-background border border-border rounded-xl space-y-3.5 shadow-sm">
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs">
                       <div>
-                        <span className="text-sm font-medium text-foreground block">
+                        <span className="text-muted-foreground block mb-0.5">Client / Account</span>
+                        <strong className="text-foreground text-sm font-semibold block">
                           {activeOrder.is_self_stock ? 'Internal Factory Stock' : company(activeOrder.party_id)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {activeOrder.remarks ? activeOrder.remarks : 'Order registered in factory queue'}
+                        </strong>
+                        <span className="text-[11px] text-muted-foreground">
+                          {activeOrder.is_self_stock ? 'Self Stocking' : 'Commercial Client'}
                         </span>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {activeParty?.email && (
-                        <span className="flex items-center gap-1.5 hover:text-foreground">
-                          <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="hidden sm:inline">{activeParty.email}</span>
+
+                      <div>
+                        <span className="text-muted-foreground block mb-0.5">Total Order Value</span>
+                        <strong className="text-foreground text-sm font-semibold block">
+                          {money(activeTotalValue)}
+                        </strong>
+                        <span className="text-[11px] text-muted-foreground">
+                          {activeItems.length} line item{activeItems.length === 1 ? '' : 's'}
                         </span>
-                      )}
-                      {activeParty?.phone_number && (
-                        <span className="flex items-center gap-1.5 hover:text-foreground">
-                          <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>{activeParty.phone_number}</span>
-                        </span>
-                      )}
+                      </div>
+
+                      <div>
+                        <span className="text-muted-foreground block mb-0.5">Order Date</span>
+                        <div className="flex items-center gap-1.5 font-medium text-foreground">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>{dateLabel(activeOrder.order_date)}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <span className="text-muted-foreground block mb-0.5">Due / Delivery Date</span>
+                        <div className="flex items-center gap-1.5 font-medium text-foreground">
+                          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>{dateLabel(activeOrder.expected_date)}</span>
+                        </div>
+                      </div>
                     </div>
+
+                    {activeOrder.remarks && (
+                      <div className="pt-3 border-t border-border/70 flex items-start gap-2 text-xs">
+                        <ClipboardList className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-semibold text-foreground block">Production Notes & Instructions:</span>
+                          <span className="text-muted-foreground whitespace-pre-wrap">{activeOrder.remarks}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {/* Fulfillment Health */}
+                {/* Line Items & Specifications */}
                 <div>
-                  <div className="drawer-section-label">Order Fulfilment Health</div>
-                  <div className="p-4 bg-background border border-border rounded-lg space-y-4">
-                    <div className="flex items-baseline gap-3 pb-2 border-b border-border/60">
-                      <div className="text-3xl font-normal text-foreground tabular-nums tracking-tight">
-                        {activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Fulfilment health across scheduled production runs
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 pt-1">
-                      {/* Stage 1: Timber Cutting & Sizing */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-medium text-foreground">Timber Cutting & Sizing</span>
-                          <span className="text-muted-foreground tabular-nums font-medium">100%</span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
-                          <div className="h-full bg-emerald-500 rounded-full w-full" />
-                        </div>
-                      </div>
-
-                      {/* Stage 2: Box Assembly & Finishing */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-medium text-foreground">Box Assembly & Finishing</span>
-                          <span className="text-muted-foreground tabular-nums font-medium">
-                            {activeTotalQty > 0 ? Math.round((activeCompletedQty / activeTotalQty) * 100) : 0}%
-                          </span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all duration-300"
-                            style={{
-                              width: `${activeTotalQty > 0 ? Math.min(100, Math.round((activeCompletedQty / activeTotalQty) * 100)) : 0}%`
-                            }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Stage 3: Dispatch & Delivery Challan */}
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-medium text-foreground">Dispatch & Delivery Challan</span>
-                          <span className="text-muted-foreground tabular-nums font-medium">
-                            {activeTotalQty > 0 ? Math.round((activeDispatchedQty / activeTotalQty) * 100) : 0}%
-                          </span>
-                        </div>
-                        <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                            style={{
-                              width: `${activeTotalQty > 0 ? Math.min(100, Math.round((activeDispatchedQty / activeTotalQty) * 100)) : 0}%`
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Line Items Breakdown */}
-                <div>
-                  <div className="drawer-section-label">Line Items ({activeItems.length})</div>
+                  <div className="drawer-section-label">Line Items & Specifications ({activeItems.length})</div>
                   <div className="space-y-3">
-                    {activeItems.map((item) => (
-                      <div key={item.id} className="p-3.5 bg-background border border-border rounded-lg space-y-2 text-xs">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-semibold text-foreground text-sm block">{item.box_type}</span>
-                            <span className="text-muted-foreground">{item.size_dimensions}</span>
+                    {activeItems.map((item, idx) => {
+                      const itemPercent = item.ordered_qty > 0 ? Math.min(100, Math.round((item.completed_qty / item.ordered_qty) * 100)) : 0;
+                      const itemPending = Math.max(0, item.ordered_qty - item.completed_qty);
+                      return (
+                        <div key={item.id || idx} className="p-3.5 bg-background border border-border rounded-xl space-y-2.5 shadow-sm">
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <span className="font-semibold text-foreground text-sm block">{item.box_type}</span>
+                              <span className="font-mono text-xs text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                                {item.size_dimensions}
+                              </span>
+                            </div>
+                            <Pill value={item.priority_signal} />
                           </div>
-                          <Pill value={item.priority_signal} />
+
+                          {item.specification && (
+                            <div className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1.5 rounded-md border border-border/50">
+                              <span className="font-medium text-foreground">Specification: </span>
+                              {item.specification}
+                            </div>
+                          )}
+
+                          {item.code_remarks && (
+                            <div className="text-[11px] text-muted-foreground">
+                              <span className="font-medium text-foreground">Code/Remarks: </span>
+                              {item.code_remarks}
+                            </div>
+                          )}
+
+                          {/* Progress bar per item */}
+                          <div className="pt-1">
+                            <div className="flex justify-between items-center text-[11px] mb-1">
+                              <span className="text-muted-foreground">
+                                Produced: <strong className="text-foreground">{number(item.completed_qty)}</strong> / {number(item.ordered_qty)} pcs
+                              </span>
+                              <span className="font-medium text-foreground tabular-nums">
+                                {itemPercent}%
+                              </span>
+                            </div>
+                            <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
+                              <div
+                                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                                style={{ width: `${itemPercent}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Operational item metrics */}
+                          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 pt-2 border-t border-border/70 text-[11px]">
+                            <div>
+                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Ordered</span>
+                              <strong className="text-foreground text-xs sm:text-sm">{number(item.ordered_qty)}</strong>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Pending</span>
+                              <strong className={`text-xs sm:text-sm ${itemPending > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                {number(itemPending)}
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Rate</span>
+                              <strong className="text-foreground text-xs sm:text-sm">{money(item.unit_rate)}</strong>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Total</span>
+                              <strong className="text-foreground text-xs sm:text-sm font-semibold">
+                                {money(item.total_price ?? (item.ordered_qty * item.unit_rate))}
+                              </strong>
+                            </div>
+                          </div>
                         </div>
-                        {item.specification && (
-                          <div className="text-muted-foreground bg-secondary/60 p-1.5 rounded">
-                            Spec: {item.specification}
-                          </div>
-                        )}
-                        <div className="grid grid-cols-4 gap-2 pt-2 border-t border-border/70 text-[11px]">
-                          <div>
-                            <span className="text-muted-foreground block">Qty</span>
-                            <strong className="text-foreground">{number(item.ordered_qty)}</strong>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground block">Rate</span>
-                            <strong className="text-foreground">{money(item.unit_rate)}</strong>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground block">Produced</span>
-                            <strong className="text-foreground">{number(item.completed_qty)}</strong>
-                          </div>
-                          <div className="text-right">
-                            <span className="text-muted-foreground block">Total</span>
-                            <strong className="text-foreground font-semibold">{money(item.total_price ?? (item.ordered_qty * item.unit_rate))}</strong>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
 
-              {/* Pinned Footer: Destructive outline on left, Secondary + Primary on right */}
-              <div className="p-4 border-t border-border bg-background flex justify-between items-center gap-3">
+              {/* Pinned Footer: Mobile screen has only icons, desktop screen has icon + text */}
+              <div className="p-3 sm:p-4 border-t border-border bg-background flex justify-between items-center gap-2 shrink-0">
                 <div>
                   {isAdmin && activeOrder.status !== 'Completed' && activeOrder.status !== 'Cancelled' && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      className="border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive h-9 px-2.5 sm:px-3 gap-1.5"
+                      title="Close order short"
+                      aria-label="Close order short"
                       onClick={() => {
                         setCloseShortOrderId(activeOrder.id);
                         setCloseShortReason('');
                       }}
                     >
-                      Close order short
+                      <Ban className="w-4 h-4 text-destructive shrink-0" />
+                      <span className="hidden sm:inline">Close short</span>
                     </Button>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
-                    className="text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-                    onClick={() => sendOrderWhatsApp(activeOrder, activeItems, activeParty)}
+                    className="h-9 px-2.5 sm:px-3 gap-1.5"
+                    title="Export CSV"
+                    aria-label="Export CSV"
+                    onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}
                   >
-                    <WhatsAppIcon className="w-3.5 h-3.5 mr-1" />
-                    Share WhatsApp
+                    <Download className="w-4 h-4 shrink-0" />
+                    <span className="hidden sm:inline">Export CSV</span>
                   </Button>
-                  <Button variant="secondary" size="sm" onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}>
-                    Export CSV
-                  </Button>
-                  <Button variant="default" size="sm" onClick={() => setViewOrderId(null)}>
-                    Done
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-9 px-3 sm:px-4 gap-1.5"
+                    title="Done"
+                    aria-label="Done"
+                    onClick={() => setViewOrderId(null)}
+                  >
+                    <Check className="w-4 h-4 shrink-0" />
+                    <span className="hidden sm:inline">Done</span>
                   </Button>
                 </div>
               </div>
@@ -903,7 +1015,7 @@ export function Orders(){
       </Sheet>
 
       {/* New Order Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">New Manufacturing Order</DialogTitle>
           <div className="form-subtitle">
@@ -932,11 +1044,24 @@ export function Orders(){
               </label>
               <label>
                 Order Date
-                <ThemedDatePicker aria-label="Order Date" name="order_date" defaultValue={today()} required />
+                <ThemedDatePicker
+                  aria-label="Order Date"
+                  name="order_date"
+                  value={orderDate}
+                  onChange={setOrderDate}
+                  minDate={today()}
+                  required
+                />
               </label>
               <label>
                 Target Delivery Date
-                <ThemedDatePicker aria-label="Target Delivery Date" name="expected_date" defaultValue={today()} required />
+                <ThemedDatePicker
+                  aria-label="Target Delivery Date"
+                  name="expected_date"
+                  defaultValue={today()}
+                  minDate={orderDate || today()}
+                  required
+                />
               </label>
               <label>
                 Intake Medium
@@ -1001,16 +1126,11 @@ export function Orders(){
                         }}
                       />
                     </label>
-                    <label>
-                      Size Dimensions
-                      <textarea
-                        required
-                        rows={2}
-                        placeholder="L x W x H (inches / mm)"
-                        value={l.size_dimensions}
-                        onChange={e=>setLines(lines.map((x,i)=>i===index?{...x,size_dimensions:e.target.value}:x))}
-                      />
-                    </label>
+                    <BoxDimensionInput
+                      required
+                      value={l.size_dimensions}
+                      onChange={val => setLines(lines.map((x,i)=>i===index?{...x,size_dimensions:val}:x))}
+                    />
                     <label>
                       Specification
                       <input

@@ -1,4 +1,4 @@
-import { useState, useRef, type ReactNode } from 'react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { Search, PackageOpen, Download, Plus, ChevronDown, ChevronLeft, ChevronRight, Calendar as CalendarIcon, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -60,11 +60,19 @@ export function AccessNotice(){
   return null;
 }
 
-export function SearchFilter({value,onChange,placeholder='Search records…'}:{value:string;onChange:(v:string)=>void;placeholder?:string}){
+export function SearchFilter({
+  value,
+  onChange,
+  placeholder = 'Search records…'
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
   const inputRef = useRef<HTMLInputElement>(null);
   return (
-    <div className="crm-search-pill" onClick={()=>inputRef.current?.focus()}>
-      <Search className="size-3 text-muted-foreground shrink-0 pointer-events-none"/>
+    <div className="crm-search-pill group" onClick={() => inputRef.current?.focus()}>
+      <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0 pointer-events-none transition-colors group-focus-within:text-primary" />
       <input
         ref={inputRef}
         type="search"
@@ -73,9 +81,23 @@ export function SearchFilter({value,onChange,placeholder='Search records…'}:{v
         aria-label="Search records"
         placeholder={placeholder}
         value={value}
-        onChange={e=>onChange(e.target.value)}
-        className="!border-0 !outline-none !shadow-none !ring-0 !bg-transparent text-xs sm:text-xs"
+        onChange={e => onChange(e.target.value)}
+        className="crm-search-input"
       />
+      {value && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onChange('');
+            inputRef.current?.focus();
+          }}
+          className="filter-pill-clear-btn shrink-0"
+          title="Clear search"
+        >
+          <X size={11} />
+        </button>
+      )}
     </div>
   );
 }
@@ -98,9 +120,19 @@ export function AddButton({onClick,children}:{onClick:()=>void;children:ReactNod
   );
 }
 
-export function Pill({value}:{value:string}){
-  const normalized = value === 'Amber' ? 'Yellow' : value;
-  return <span className={'pill '+normalized}>{normalized}</span>;
+export function Pill({ value, className }: { value: string; className?: string }) {
+  const raw = value || '—';
+  const normalized = raw === 'Amber' ? 'Yellow' : raw;
+  const slug = normalized.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  return (
+    <span
+      className={cn('pill', `pill-${slug}`, normalized, className)}
+      data-status={normalized}
+    >
+      <span className="pill-dot" aria-hidden="true" />
+      <span className="pill-text">{normalized}</span>
+    </span>
+  );
 }
 
 export function CrmTag({
@@ -119,6 +151,20 @@ export interface TabItem {
   count?: number;
 }
 
+const TAB_STATUS_DOTS: Record<string, string> = {
+  'Pending': 'bg-amber-500',
+  'In Production': 'bg-blue-500',
+  'Partially Dispatched': 'bg-purple-500',
+  'Dispatched': 'bg-sky-500',
+  'Completed': 'bg-emerald-500',
+  'Cancelled': 'bg-rose-500',
+  'Red': 'bg-red-500',
+  'Yellow': 'bg-amber-500',
+  'Green': 'bg-emerald-500',
+  'ready': 'bg-emerald-500',
+  'history': 'bg-sky-500',
+};
+
 export function ViewTabs({
   tabs,
   active,
@@ -135,6 +181,7 @@ export function ViewTabs({
         const label = typeof t === 'string' ? t : t.label;
         const count = typeof t === 'string' ? undefined : t.count;
         const isSelected = active === id;
+        const dotColor = TAB_STATUS_DOTS[id];
         return (
           <button
             key={id}
@@ -145,6 +192,7 @@ export function ViewTabs({
             className={`crm-tab ${isSelected ? 'active' : ''}`}
             onClick={() => onChange(id)}
           >
+            {dotColor && <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotColor)} aria-hidden="true" />}
             <span>{label}</span>
             {count !== undefined && <span className="crm-tab-count">{count}</span>}
           </button>
@@ -176,17 +224,24 @@ export function FilterToken({
     <Select value={value} onValueChange={onChange}>
       <SelectTrigger
         size="sm"
-        className={`segmented-filter-pill group ${isActive ? 'is-active' : ''} border-0 bg-secondary text-secondary-foreground shadow-sm h-8 px-0`}
+        className={cn(
+          "crm-filter-btn group",
+          isActive && "crm-filter-btn-active is-active"
+        )}
       >
-        <span className="filter-pill-label">{label}</span>
-        <span className="filter-pill-divider" aria-hidden="true" />
-        <div className="filter-pill-select-wrapper">
-          <span className="filter-pill-value">
-            <span className="truncate max-w-[140px]">{displayLabel}</span>
+        <div className="flex items-center gap-1.5 truncate pr-1">
+          {isActive ? (
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" aria-hidden="true" />
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 shrink-0" aria-hidden="true" />
+          )}
+          <span className="crm-filter-label shrink-0">{label}:</span>
+          <span className="crm-filter-value truncate max-w-[130px] sm:max-w-[160px]">
+            {displayLabel}
           </span>
         </div>
       </SelectTrigger>
-      <SelectContent align="start" className="min-w-[160px]">
+      <SelectContent align="start" className="min-w-[170px] rounded-lg shadow-xl border border-border">
         {normalizedOptions.map(opt => (
           <SelectItem key={opt.value} value={opt.value}>
             {opt.label}
@@ -314,29 +369,36 @@ export function ThemedCalendar({
   value,
   onChange,
   onClose,
+  minDate,
 }: {
   value: string;
   onChange: (val: string) => void;
   onClose: () => void;
+  minDate?: string;
 }) {
   const today = new Date();
   const currentTodayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-  const parts = value && value.includes('-') ? value.split('-') : [];
-  const initialDate = parts.length >= 2
-    ? {
-        year: parseInt(parts[0] ?? String(today.getFullYear()), 10),
-        month: parseInt(parts[1] ?? '1', 10) - 1,
-      }
-    : {
-        year: today.getFullYear(),
-        month: today.getMonth(),
-      };
+  const minParts = minDate && minDate.includes('-') ? minDate.split('-').map(Number) : [];
+  const hasMin = minParts.length >= 2 && !isNaN(minParts[0]!) && !isNaN(minParts[1]!);
+  const minYear = hasMin ? minParts[0]! : 0;
+  const minMonth = hasMin ? minParts[1]! - 1 : 0;
 
-  const [viewYear, setViewYear] = useState(initialDate.year);
-  const [viewMonth, setViewMonth] = useState(initialDate.month);
+  const parts = value && value.includes('-') ? value.split('-') : [];
+  const rawInitYear = parts.length >= 2 ? parseInt(parts[0] ?? String(today.getFullYear()), 10) : today.getFullYear();
+  const rawInitMonth = parts.length >= 2 ? parseInt(parts[1] ?? '1', 10) - 1 : today.getMonth();
+
+  const isInitPast = hasMin && (rawInitYear < minYear || (rawInitYear === minYear && rawInitMonth < minMonth));
+  const initYear = isInitPast ? minYear : rawInitYear;
+  const initMonth = isInitPast ? minMonth : rawInitMonth;
+
+  const [viewYear, setViewYear] = useState(initYear);
+  const [viewMonth, setViewMonth] = useState(initMonth);
+
+  const isPrevMonthDisabled = hasMin && (viewYear < minYear || (viewYear === minYear && viewMonth <= minMonth));
 
   function prevMonth() {
+    if (isPrevMonthDisabled) return;
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear(y => y - 1);
@@ -375,17 +437,46 @@ export function ThemedCalendar({
     nextMonthDays.push(i);
   }
 
+  const currentYear = today.getFullYear();
+  const startYear = hasMin ? minYear : currentYear - 5;
+  const endYear = currentYear + 10;
+  const yearOptions: number[] = [];
+  for (let y = startYear; y <= endYear; y++) {
+    yearOptions.push(y);
+  }
+
   return (
     <div className="crm-calendar-root" role="dialog" aria-label="Calendar">
       <div className="crm-calendar-header">
-        <span className="crm-calendar-title">
-          {MONTH_NAMES[viewMonth]} {viewYear}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="crm-calendar-title font-medium">
+            {MONTH_NAMES[viewMonth]}
+          </span>
+          <select
+            value={viewYear}
+            onChange={(e) => {
+              const newY = Number(e.target.value);
+              setViewYear(newY);
+              if (hasMin && newY === minYear && viewMonth < minMonth) {
+                setViewMonth(minMonth);
+              }
+            }}
+            aria-label="Select year"
+            className="text-xs font-semibold bg-secondary/80 hover:bg-secondary border border-border/80 text-foreground rounded px-1.5 py-0.5 cursor-pointer outline-none focus:ring-1 focus:ring-primary transition-colors"
+          >
+            {yearOptions.map(y => (
+              <option key={y} value={y} className="bg-popover text-popover-foreground">
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="crm-calendar-nav">
           <button
             type="button"
             className="crm-calendar-nav-btn"
             onClick={prevMonth}
+            disabled={isPrevMonthDisabled}
             aria-label="Previous month"
           >
             <ChevronLeft size={13} />
@@ -418,13 +509,16 @@ export function ThemedCalendar({
           const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
           const isSelected = value === dateStr;
           const isToday = currentTodayStr === dateStr;
+          const isPast = minDate ? dateStr < minDate : false;
 
           return (
             <button
               key={`curr-${d}`}
               type="button"
-              className={`crm-calendar-day ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+              disabled={isPast}
+              className={`crm-calendar-day ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''} ${isPast ? 'disabled' : ''}`}
               onClick={() => {
+                if (isPast) return;
                 onChange(dateStr);
                 onClose();
               }}
@@ -454,8 +548,10 @@ export function ThemedCalendar({
         </button>
         <button
           type="button"
+          disabled={Boolean(minDate && currentTodayStr < minDate)}
           className="crm-calendar-action-btn today"
           onClick={() => {
+            if (minDate && currentTodayStr < minDate) return;
             onChange(currentTodayStr);
             onClose();
           }}
@@ -497,38 +593,42 @@ export function DateFilterPill({
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`segmented-filter-pill group ${isActive ? 'is-active' : ''}`}
+          className={cn(
+            "crm-filter-btn group",
+            isActive && "crm-filter-btn-active is-active"
+          )}
           data-active={isActive ? "true" : "false"}
         >
-          <span className="filter-pill-label">{label}</span>
-          <span className="filter-pill-divider" aria-hidden="true" />
-          <div className="filter-pill-select-wrapper">
-            <span className="filter-pill-value">
-              <span className="truncate max-w-[120px]">{displayLabel}</span>
-              {isActive ? (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="filter-pill-clear-btn ml-1"
-                  title="Clear date"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange('');
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      onChange('');
-                    }
-                  }}
-                >
-                  <X size={11} />
-                </span>
-              ) : (
-                <CalendarIcon className="filter-pill-chevron" />
-              )}
+          <div className="flex items-center gap-1.5 truncate">
+            <CalendarIcon className={cn("w-3.5 h-3.5 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+            <span className="crm-filter-label shrink-0">{label}:</span>
+            <span className="crm-filter-value truncate max-w-[120px] sm:max-w-[150px]">
+              {displayLabel}
             </span>
           </div>
+
+          {isActive ? (
+            <span
+              role="button"
+              tabIndex={0}
+              className="filter-pill-clear-btn ml-1 shrink-0"
+              title="Clear date"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.stopPropagation();
+                  onChange('');
+                }
+              }}
+            >
+              <X size={11} />
+            </span>
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 opacity-60 shrink-0 ml-1 group-hover:opacity-100 transition-opacity" />
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -557,6 +657,8 @@ export function ThemedDatePicker({
   disabled,
   className,
   'aria-label': ariaLabel,
+  minDate,
+  disablePast = true,
 }: {
   value?: string;
   onChange?: (val: string) => void;
@@ -567,10 +669,26 @@ export function ThemedDatePicker({
   disabled?: boolean;
   className?: string;
   'aria-label'?: string;
+  minDate?: string;
+  disablePast?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [internalVal, setInternalVal] = useState(defaultValue ?? '');
+  const now = new Date();
+  const currentTodayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const effectiveMinDate = minDate !== undefined ? minDate : (disablePast ? currentTodayStr : undefined);
+
+  const initialVal = defaultValue ?? '';
+  const [internalVal, setInternalVal] = useState(initialVal);
   const activeVal = value !== undefined ? value : internalVal;
+
+  useEffect(() => {
+    if (effectiveMinDate && activeVal && activeVal < effectiveMinDate) {
+      if (value === undefined) {
+        setInternalVal(effectiveMinDate);
+      }
+      onChange?.(effectiveMinDate);
+    }
+  }, [effectiveMinDate]);
 
   let displayLabel = placeholder;
   if (activeVal && activeVal.includes('-')) {
@@ -617,6 +735,7 @@ export function ThemedDatePicker({
             value={activeVal}
             onChange={handleSelect}
             onClose={() => setOpen(false)}
+            minDate={effectiveMinDate}
           />
         </PopoverContent>
       </Popover>
@@ -773,4 +892,260 @@ export function Pagination({
     </div>
   );
 }
+
+export function clearModalSearchParams(navigate?: any) {
+  if (typeof window === 'undefined') return;
+
+  const url = new URL(window.location.href);
+  let changed = false;
+  ['new', 'view', 'add', 'edit', 'open'].forEach(param => {
+    if (url.searchParams.has(param)) {
+      url.searchParams.delete(param);
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    const cleanUrl = url.pathname + (url.search ? url.search : '');
+    window.history.replaceState(null, '', cleanUrl);
+
+    if (navigate) {
+      try {
+        navigate({
+          to: url.pathname as any,
+          search: (prev: any) => {
+            if (!prev) return {};
+            const next = { ...prev };
+            delete next.new;
+            delete next.view;
+            delete next.add;
+            delete next.edit;
+            delete next.open;
+            return next;
+          },
+          replace: true,
+        });
+      } catch {
+        // safe fallback
+      }
+    }
+  }
+}
+
+export function parseBoxDimensions(str?: string): { length: string; width: string; height: string; unit: string } {
+  if (!str) return { length: '', width: '', height: '', unit: 'in' };
+  let unit = 'in';
+  let cleanStr = str.trim();
+
+  const unitMatch = cleanStr.match(/\b(inches|inch|in|mm|cm|ft)\b/i);
+  if (unitMatch) {
+    const rawUnit = unitMatch[1]!.toLowerCase();
+    if (rawUnit.startsWith('in')) unit = 'in';
+    else if (rawUnit === 'mm') unit = 'mm';
+    else if (rawUnit === 'cm') unit = 'cm';
+    cleanStr = cleanStr.replace(unitMatch[0]!, '').trim();
+  }
+
+  const numbers = cleanStr.match(/\d+(?:\.\d+)?/g);
+  if (numbers && numbers.length >= 3) {
+    return {
+      length: numbers[0] ?? '',
+      width: numbers[1] ?? '',
+      height: numbers[2] ?? '',
+      unit
+    };
+  } else if (numbers && numbers.length === 2) {
+    return {
+      length: numbers[0] ?? '',
+      width: numbers[1] ?? '',
+      height: '',
+      unit
+    };
+  } else if (numbers && numbers.length === 1) {
+    return {
+      length: numbers[0] ?? '',
+      width: '',
+      height: '',
+      unit
+    };
+  }
+  return { length: '', width: '', height: '', unit };
+}
+
+export function formatBoxDimensions(l: string, w: string, h: string, u: string): string {
+  const cleanL = l.trim();
+  const cleanW = w.trim();
+  const cleanH = h.trim();
+  if (!cleanL && !cleanW && !cleanH) return '';
+  if (cleanL && cleanW && cleanH) {
+    return `${cleanL} × ${cleanW} × ${cleanH} ${u}`;
+  }
+  return [cleanL, cleanW, cleanH].filter(Boolean).join(' × ') + (cleanL || cleanW || cleanH ? ` ${u}` : '');
+}
+
+export function BoxDimensionInput({
+  value = '',
+  onChange,
+  name,
+  required,
+  label = 'Size Dimensions',
+  className
+}: {
+  value?: string;
+  onChange?: (val: string) => void;
+  name?: string;
+  required?: boolean;
+  label?: string;
+  className?: string;
+}) {
+  const parsed = parseBoxDimensions(value);
+  const [length, setLength] = useState(parsed.length);
+  const [width, setWidth] = useState(parsed.width);
+  const [height, setHeight] = useState(parsed.height);
+  const [unit, setUnit] = useState(parsed.unit);
+
+  useEffect(() => {
+    const current = formatBoxDimensions(length, width, height, unit);
+    if (value !== current) {
+      const p = parseBoxDimensions(value);
+      setLength(p.length);
+      setWidth(p.width);
+      setHeight(p.height);
+      setUnit(p.unit);
+    }
+  }, [value]);
+
+  const update = (l: string, w: string, h: string, u: string) => {
+    const formatted = formatBoxDimensions(l, w, h, u);
+    onChange?.(formatted);
+  };
+
+  const handleNumberInput = (field: 'length' | 'width' | 'height', rawVal: string) => {
+    const numbers = rawVal.match(/\d+(?:\.\d+)?/g);
+    if (numbers && numbers.length >= 3) {
+      const p = parseBoxDimensions(rawVal);
+      const newL = p.length || numbers[0]!;
+      const newW = p.width || numbers[1]!;
+      const newH = p.height || numbers[2]!;
+      const newU = p.unit || unit;
+      setLength(newL);
+      setWidth(newW);
+      setHeight(newH);
+      setUnit(newU);
+      update(newL, newW, newH, newU);
+      return;
+    }
+
+    let val = rawVal.replace(/[^0-9.]/g, '');
+    const parts = val.split('.');
+    if (parts.length > 2) {
+      val = parts[0] + '.' + parts.slice(1).join('');
+    }
+
+    let newL = length;
+    let newW = width;
+    let newH = height;
+    if (field === 'length') {
+      newL = val;
+      setLength(val);
+    } else if (field === 'width') {
+      newW = val;
+      setWidth(val);
+    } else if (field === 'height') {
+      newH = val;
+      setHeight(val);
+    }
+
+    update(newL, newW, newH, unit);
+  };
+
+  const handleUnitChange = (newUnit: string) => {
+    setUnit(newUnit);
+    update(length, width, height, newUnit);
+  };
+
+  const isComplete = Boolean(length.trim() && width.trim() && height.trim());
+  const formattedPreview = isComplete ? `${length} × ${width} × ${height} ${unit}` : '';
+
+  return (
+    <div className={cn("w-full flex flex-col justify-end", className)}>
+      {name && <input type="hidden" name={name} value={formattedPreview} required={required} />}
+      <div className="flex items-center justify-between mb-1.5 min-h-[18px]">
+        <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+          <span>{label}</span>
+          <span className="text-[11px] text-muted-foreground font-normal">(L × W × H)</span>
+        </span>
+        {isComplete ? (
+          <span className="inline-flex items-center text-[10.5px] font-mono font-medium text-primary px-1.5 py-0.5 rounded bg-primary/10 border border-primary/20">
+            {formattedPreview}
+          </span>
+        ) : (
+          <span className="text-[10.5px] text-muted-foreground font-normal">
+            Numbers only
+          </span>
+        )}
+      </div>
+
+      <div className="box-dimension-widget">
+        <div className="dimension-sub-field">
+          <span className="dimension-badge" title="Length">L</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*\.?[0-9]*"
+            value={length}
+            placeholder="0"
+            onChange={e => handleNumberInput('length', e.target.value)}
+            required={required}
+            aria-label="Box Length"
+            className="dimension-num-input"
+          />
+        </div>
+        <span className="dimension-sep" aria-hidden="true">×</span>
+        <div className="dimension-sub-field">
+          <span className="dimension-badge" title="Width">W</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*\.?[0-9]*"
+            value={width}
+            placeholder="0"
+            onChange={e => handleNumberInput('width', e.target.value)}
+            required={required}
+            aria-label="Box Width"
+            className="dimension-num-input"
+          />
+        </div>
+        <span className="dimension-sep" aria-hidden="true">×</span>
+        <div className="dimension-sub-field">
+          <span className="dimension-badge" title="Height">H</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            pattern="[0-9]*\.?[0-9]*"
+            value={height}
+            placeholder="0"
+            onChange={e => handleNumberInput('height', e.target.value)}
+            required={required}
+            aria-label="Box Height"
+            className="dimension-num-input"
+          />
+        </div>
+        <div className="dimension-unit-field">
+          <select
+            value={unit}
+            onChange={e => handleUnitChange(e.target.value)}
+            aria-label="Dimension unit"
+            className="dimension-unit-select"
+          >
+            <option value="in">in</option>
+            <option value="mm">mm</option>
+            <option value="cm">cm</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 

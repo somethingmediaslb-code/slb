@@ -5,7 +5,7 @@ import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker,WhatsAppIcon} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker,WhatsAppIcon,clearModalSearchParams} from './common';
 import {downloadCsv,dateLabel,money,today,number,type Row} from '@/lib/erp-data';
 
 export function Dispatch(){
@@ -126,8 +126,8 @@ export function Dispatch(){
       {/* View Tabs */}
       <ViewTabs
         tabs={[
-          {id:'ready',label:'Ready to Dispatch',count:ready.length},
-          {id:'history',label:'Challan History',count:d.challans.length},
+          {id:'ready',label:'Ready to Dispatch',count:filteredReady.length},
+          {id:'history',label:'Challan History',count:filteredHistory.length},
         ]}
         active={tab}
         onChange={t=>setTab(t as 'ready'|'history')}
@@ -532,7 +532,7 @@ export function Dispatch(){
       <VolumeCharts dispatch/>
 
       {/* Create Delivery Challan Dialog */}
-      <Dialog open={!!selected} onOpenChange={()=>setSelected(null)}>
+      <Dialog open={!!selected} onOpenChange={(open)=>{ if(!open){ setSelected(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Create Delivery Challan</DialogTitle>
           <div className="form-subtitle">
@@ -588,7 +588,7 @@ export function Dispatch(){
       </Dialog>
 
       {/* Print Challan Dialog */}
-      <Dialog open={!!print} onOpenChange={()=>setPrint(null)}>
+      <Dialog open={!!print} onOpenChange={(open)=>{ if(!open){ setPrint(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Delivery Challan · {print?.challan_number}</DialogTitle>
           {print && (
@@ -660,7 +660,7 @@ export function Dispatch(){
       </Dialog>
 
       {/* Explicit Confirm Dispatch Step Dialog */}
-      <Dialog open={!!confirmDispatchChallan} onOpenChange={()=>setConfirmDispatchChallan(null)}>
+      <Dialog open={!!confirmDispatchChallan} onOpenChange={(open)=>{ if(!open){ setConfirmDispatchChallan(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Confirm Physical Dispatch · {confirmDispatchChallan?.challan_number}</DialogTitle>
           <div className="form-subtitle">

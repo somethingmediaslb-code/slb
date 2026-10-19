@@ -32,7 +32,7 @@ import {
   Pill,
   CrmTag,
 } from './common';
-import { money, number, dateLabel, today, downloadCsv, finance, type Row } from '@/lib/erp-data';
+import { money, number, dateLabel, today, downloadCsv, finance, formatLocalDate, type Row } from '@/lib/erp-data';
 
 export type ReportTab =
   | 'realised_profit'
@@ -64,17 +64,17 @@ export function Reports() {
       setFrom('');
       setTo('');
     } else if (p === 'Day') {
-      const todayStr = now.toISOString().slice(0, 10);
+      const todayStr = formatLocalDate(now);
       setFrom(todayStr);
       setTo(todayStr);
     } else if (p === 'Week') {
-      const weekAgo = new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10);
+      const weekAgo = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
       setFrom(weekAgo);
-      setTo(now.toISOString().slice(0, 10));
+      setTo(formatLocalDate(now));
     } else if (p === 'Month') {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      const firstOfMonth = formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
       setFrom(firstOfMonth);
-      setTo(now.toISOString().slice(0, 10));
+      setTo(formatLocalDate(now));
     }
   };
 

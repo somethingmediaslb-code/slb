@@ -1,11 +1,12 @@
 import {useState,useEffect} from 'react';
+import {useNavigate, useSearch} from '@tanstack/react-router';
 import {Pencil,Building2,Mail,Phone,FileText,MapPin,MoreHorizontal,CheckCircle2,Clock,Package,Layers,Trash2} from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,TableCalcBar,CrmTag,SegmentedMeter,Pill,Pagination} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,TableCalcBar,CrmTag,SegmentedMeter,Pill,Pagination,clearModalSearchParams,BoxDimensionInput} from './common';
 import {supabase} from '@/integrations/supabase/client';
 import {downloadCsv,money,dateLabel,number} from '@/lib/erp-data';
 import {toast} from 'sonner';
@@ -37,11 +38,47 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
   const c=config[kind];
   const pageTitle=title||c.title;
   const {data,user,signIn,refresh}=useFactory();
+  const navigate=useNavigate();
+  const searchParams=useSearch({strict:false}) as {new?:boolean};
   const [search,setSearch]=useState('');
   const [open,setOpen]=useState(false);
   const [editing,setEditing]=useState<Record<string,unknown>|null>(null);
   const [viewPartyId,setViewPartyId]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
+  const [itemDims,setItemDims]=useState('');
+
+  useEffect(()=>{
+    if(editing?.['size_dimensions']){
+      setItemDims(String(editing['size_dimensions']));
+    } else {
+      setItemDims('');
+    }
+  },[editing,open]);
+
+  useEffect(()=>{
+    if(searchParams.new&&user){
+      setEditing(null);
+      setItemDims('');
+      setOpen(true);
+      clearModalSearchParams(navigate);
+    }
+  },[searchParams.new,user]);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      setEditing(null);
+      setItemDims('');
+      clearModalSearchParams(navigate);
+    }
+  };
+
+  const handleViewPartyChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      setViewPartyId(null);
+      clearModalSearchParams(navigate);
+    }
+  };
 
   async function deleteRecord(row:Record<string,unknown>){
     if(!user){signIn();return;}
@@ -86,28 +123,52 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
     let error;
 
     if(kind==='parties'){
+      const compName = String(values['company_name'] ?? '').trim();
+      if (!compName) {
+        toast.error('Company / Party name is required.');
+        setBusy(false);
+        return;
+      }
       const v={
-        company_name:String(values['company_name']),
-        phone_number:String(values['phone_number']),
-        email:String(values['email']),
-        gstin:String(values['gstin']),
-        address:String(values['address'])
+        company_name:compName,
+        phone_number:String(values['phone_number'] ?? '').trim(),
+        email:String(values['email'] ?? '').trim(),
+        gstin:String(values['gstin'] ?? '').trim(),
+        address:String(values['address'] ?? '').trim()
       };
       ({error}=editing?await supabase.from('party_master').update(v).eq('id',String(editing['id'])):await supabase.from('party_master').insert(v));
     } else if(kind==='items'){
+      const boxType = String(values['box_type'] ?? '').trim();
+      if (!boxType) {
+        toast.error('Box type name is required.');
+        setBusy(false);
+        return;
+      }
+      const dims = String(values['size_dimensions'] ?? '').trim();
+      if (!dims) {
+        toast.error('Please enter complete box dimensions (Length × Width × Height).');
+        setBusy(false);
+        return;
+      }
       const v={
-        box_type:String(values['box_type']),
-        size_dimensions:String(values['size_dimensions']),
-        specification:String(values['specification']),
-        unit_rate:Number(values['unit_rate'])
+        box_type:boxType,
+        size_dimensions:dims,
+        specification:String(values['specification'] ?? '').trim(),
+        unit_rate:Math.max(0, Number(values['unit_rate']) || 0)
       };
       ({error}=editing?await supabase.from('item_master').update(v).eq('id',String(editing['id'])):await supabase.from('item_master').insert(v));
     } else {
+      const labourName = String(values['labour_name'] ?? '').trim();
+      if (!labourName) {
+        toast.error('Labour / Worker name is required.');
+        setBusy(false);
+        return;
+      }
       const v={
-        labour_name:String(values['labour_name']),
-        phone:String(values['phone']),
-        daily_rate:Number(values['daily_rate']),
-        unit_assignment:String(values['unit_assignment'])
+        labour_name:labourName,
+        phone:String(values['phone'] ?? '').trim(),
+        daily_rate:Math.max(0, Number(values['daily_rate']) || 0),
+        unit_assignment:String(values['unit_assignment'] ?? '').trim()
       };
       ({error}=editing?await supabase.from('labour_master').update(v).eq('id',String(editing['id'])):await supabase.from('labour_master').insert(v));
     }
@@ -443,7 +504,7 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
 
       {/* Slide-over Inspection Sheet for Parties (CRM Company View - Screenshot 5) */}
       {kind==='parties' && (
-        <Sheet open={!!viewPartyId} onOpenChange={open=>!open&&setViewPartyId(null)}>
+        <Sheet open={!!viewPartyId} onOpenChange={handleViewPartyChange}>
           <SheetContent side="right" className="sm:max-w-xl w-full p-0 flex flex-col bg-card overflow-hidden">
             {activeParty && (
               <>
@@ -585,7 +646,7 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
       )}
 
       {/* Edit / Create Dialog */}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">{editing ? `Edit ${c.entity.slice(0,-1)}` : c.add}</DialogTitle>
           <div className="form-subtitle">
@@ -594,19 +655,32 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
 
           <form onSubmit={submit}>
             <div className="form-grid">
-              {c.fields.map(([key,label],i)=>(
-                <label key={key} className={key==='address'?'form-wide':''}>
-                  {label}
-                  <input
-                    name={key}
-                    defaultValue={String(editing?.[key]??'')}
-                    required={i===0||(kind==='items'&&i===1)}
-                    type={key.includes('rate')?'number':key==='email'?'email':'text'}
-                    min={0}
-                    step={key.includes('rate')?'.01':undefined}
-                  />
-                </label>
-              ))}
+              {c.fields.map(([key,label],i)=>{
+                if (kind === 'items' && key === 'size_dimensions') {
+                  return (
+                    <BoxDimensionInput
+                      key={key}
+                      name="size_dimensions"
+                      value={itemDims}
+                      onChange={setItemDims}
+                      required
+                    />
+                  );
+                }
+                return (
+                  <label key={key} className={key==='address'?'form-wide':''}>
+                    {label}
+                    <input
+                      name={key}
+                      defaultValue={String(editing?.[key]??'')}
+                      required={i===0||(kind==='items'&&i===1)}
+                      type={key.includes('rate')?'number':key==='email'?'email':'text'}
+                      min={0}
+                      step={key.includes('rate')?'.01':undefined}
+                    />
+                  </label>
+                );
+              })}
             </div>
 
             <div className="form-actions">

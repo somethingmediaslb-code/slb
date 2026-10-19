@@ -21,7 +21,7 @@ import {
 import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory, ALL_PAGE_KEYS, DEFAULT_ROLE_PAGES} from './provider';
-import {Heading,AccessNotice,Empty,Pill,SearchFilter,Pagination} from './common';
+import {Heading,AccessNotice,Empty,Pill,SearchFilter,Pagination,clearModalSearchParams} from './common';
 import {supabase} from '@/integrations/supabase/client';
 import {enablePush,disablePush} from '@/lib/push';
 import {deleteMyAccount} from '@/lib/push.functions';
@@ -453,10 +453,12 @@ export function Admin(){
 
   const userList=Array.from(allUsersMap.values());
 
-  const filteredUsers=userList.filter(u=>{
-    const matchesSearch=(u.email+' '+u.id+' '+(u.display_name||'')+' '+(u.full_name||'')).toLowerCase().includes(search.toLowerCase());
-    const matchesRole=filterRole==='All'||u.role===filterRole;
-    return matchesSearch&&matchesRole;
+  const searchedUsers=userList.filter(u=>{
+    return (u.email+' '+u.id+' '+(u.display_name||'')+' '+(u.full_name||'')).toLowerCase().includes(search.toLowerCase());
+  });
+
+  const filteredUsers=searchedUsers.filter(u=>{
+    return filterRole==='All'||u.role===filterRole;
   });
 
   useEffect(()=>{
@@ -465,10 +467,10 @@ export function Admin(){
 
   const paginatedUsers=filteredUsers.slice((page-1)*pageSize,page*pageSize);
 
-  const pendingCount=userList.filter(u=>u.role==='pending').length;
-  const adminCount=userList.filter(u=>u.role==='admin').length;
-  const standardUserCount=userList.filter(u=>u.role==='user').length;
-  const userCount=userList.filter(u=>u.role!=='pending'&&u.role!=='admin').length;
+  const pendingCount=searchedUsers.filter(u=>u.role==='pending').length;
+  const adminCount=searchedUsers.filter(u=>u.role==='admin').length;
+  const standardUserCount=searchedUsers.filter(u=>u.role==='user').length;
+  const userCount=searchedUsers.filter(u=>u.role!=='pending'&&u.role!=='admin').length;
 
   const handleOpenHandover=(record?:AdminUserRecord)=>{
     if(record){
@@ -623,7 +625,7 @@ export function Admin(){
       {/* Tab Filter Pills */}
       <div className="crm-tabs" role="tablist">
         {[
-          {id:'All',label:'All Accounts',count:userList.length},
+          {id:'All',label:'All Accounts',count:searchedUsers.length},
           {id:'pending',label:'Pending Verification',count:pendingCount},
           {id:'user',label:'Users',count:standardUserCount},
           {id:'admin',label:'Administrators',count:adminCount},
@@ -991,7 +993,7 @@ export function Admin(){
       />
 
       {/* Role Handover & Tenant Access Modal */}
-      <Dialog open={handoverModalOpen} onOpenChange={setHandoverModalOpen}>
+      <Dialog open={handoverModalOpen} onOpenChange={(open)=>{ setHandoverModalOpen(open); if(!open) clearModalSearchParams(); }}>
         <DialogContent className="modal-wide !max-w-lg" aria-describedby={undefined}>
           <DialogTitle className="text-lg font-medium">User Role & Workspace Access</DialogTitle>
           <div className="form-subtitle">
