@@ -4,10 +4,23 @@ import {Button} from '@/components/ui/button';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {MasterPage} from './masters';
 import {useFactory} from './provider';
-import {Empty,Pill,Pagination,DateFilterPill,FilterToken,ExportButton,ThemedSelect,ThemedDatePicker,clearModalSearchParams} from './common';
+import {Empty,Pill,Pagination,DateFilterPill,FilterToken,ExportButton,ThemedSelect,ThemedDatePicker,clearModalSearchParams,ViewTabs,SearchFilter,WhatsAppIcon} from './common';
 import {money,number,dateLabel,downloadCsv,today,type Row} from '@/lib/erp-data';
+import {Truck,Plus,Pencil,Trash2,CheckCircle2} from 'lucide-react';
+import {supabase} from '@/integrations/supabase/client';
+import {toast} from 'sonner';
+
 export function Labour(){
-  const {data:d,action,isAdmin}=useFactory();
+  const {data:d,action,isAdmin,refresh}=useFactory();
+  const [deptTab, setDeptTab] = useState<'production' | 'transport'>('production');
+
+  // Transport Labour Department state
+  const [transportSearch, setTransportSearch] = useState('');
+  const [transportModalOpen, setTransportModalOpen] = useState(false);
+  const [editingTransporter, setEditingTransporter] = useState<Row<'labour_master'> | null>(null);
+  const [transportBusy, setTransportBusy] = useState(false);
+  const [transportPage, setTransportPage] = useState(1);
+
   const [selected,setSelected]=useState<Row<'production_allocations'>|null>(null);
   const [statementWorker,setStatementWorker]=useState<Row<'labour_master'>|null>(null);
   const [borrowModalOpen,setBorrowModalOpen]=useState(false);
@@ -65,8 +78,26 @@ export function Labour(){
   const totalPayrollDeductions = filteredPayroll.reduce((s, p) => s + p.deductions, 0);
   const totalPayrollNetPaid = filteredPayroll.reduce((s, p) => s + p.net_paid, 0);
 
+  // Split workers into Transport and Production
+  const transportWorkers = d.workers.filter(w => 
+    (w as any).department === 'Transport' || 
+    Boolean((w as any).vehicle_number) ||
+    (w.unit_assignment && w.unit_assignment.toLowerCase().includes('transport'))
+  );
+  const productionWorkers = d.workers.filter(w => !transportWorkers.some(tw => tw.id === w.id));
+
+  const filteredTransportWorkers = transportWorkers.filter(w => {
+    const q = transportSearch.toLowerCase();
+    const name = (w.labour_name || '').toLowerCase();
+    const veh = ((w as any).vehicle_number || '').toLowerCase();
+    const phone = (w.phone || '').toLowerCase();
+    const unit = (w.unit_assignment || '').toLowerCase();
+    return name.includes(q) || veh.includes(q) || phone.includes(q) || unit.includes(q);
+  });
+
+  const paginatedTransport = filteredTransportWorkers.slice((transportPage - 1) * pageSize, transportPage * pageSize);
   const paginatedAllocations = filteredAllocations.slice((allocPage - 1) * pageSize, allocPage * pageSize);
-  const paginatedWorkers = d.workers.slice((payrollPage - 1) * pageSize, payrollPage * pageSize);
+  const paginatedWorkers = productionWorkers.slice((payrollPage - 1) * pageSize, payrollPage * pageSize);
   const paginatedPayroll = filteredPayroll.slice((historyPage - 1) * pageSize, historyPage * pageSize);
 
   async function complete(e:React.FormEvent<HTMLFormElement>){
@@ -114,10 +145,328 @@ export function Labour(){
     if (ok) setPaymentModalPayroll(null);
   }
 
+  async function saveTransporter(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setTransportBusy(true);
+    const f = new FormData(e.currentTarget);
+    const name = String(f.get('labour_name') || '').trim();
+    const vehicle = String(f.get('vehicle_number') || '').trim();
+    const freight = Math.max(0, Number(f.get('fixed_freight_charges')) || 0);
+    const phone = String(f.get('phone') || '').trim();
+    const unit = String(f.get('unit_assignment') || '').trim() || `Transport • ${vehicle}`;
+
+    if (!name) {
+      toast.error('Transporter / Labour name is required');
+      setTransportBusy(false);
+      return;
+    }
+    if (!vehicle) {
+      toast.error('Vehicle number is required');
+      setTransportBusy(false);
+      return;
+    }
+
+    const payload: any = {
+      labour_name: name,
+      phone: phone,
+      vehicle_number: vehicle,
+      fixed_freight_charges: freight,
+      daily_rate: freight,
+      department: 'Transport',
+      unit_assignment: unit
+    };
+
+    let error;
+    if (editingTransporter) {
+      const res = await (supabase.from as any)('labour_master').update(payload).eq('id', editingTransporter.id);
+      error = res.error;
+    } else {
+      const res = await (supabase.from as any)('labour_master').insert(payload);
+      error = res.error;
+    }
+
+    setTransportBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(editingTransporter ? 'Transporter details updated' : 'Transporter registered successfully');
+    setTransportModalOpen(false);
+    setEditingTransporter(null);
+    await refresh();
+  }
+
+  async function deleteTransporter(w: Row<'labour_master'>) {
+    if (!window.confirm(`Are you sure you want to delete transporter "${w.labour_name}"? This cannot be undone.`)) return;
+    setTransportBusy(true);
+    const { error } = await (supabase.from as any)('labour_master').delete().eq('id', w.id);
+    setTransportBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Transporter removed successfully');
+    await refresh();
+  }
+
   return (
     <>
-      <MasterPage kind="workers" title="Labour Management"/>
-      <section className="mt-8">
+      {/* Department Switcher Tabs */}
+      <div className="mb-6">
+        <ViewTabs
+          tabs={[
+            { id: 'production', label: 'Production Labour Department', count: productionWorkers.length },
+            { id: 'transport', label: 'Transport Labour Department', count: transportWorkers.length },
+          ]}
+          active={deptTab}
+          onChange={t => setDeptTab(t as 'production' | 'transport')}
+        />
+      </div>
+
+      {deptTab === 'transport' ? (
+        <div className="space-y-6">
+          {/* Transport Department Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 bg-card border border-border rounded-xl">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Truck className="w-4 h-4" />
+                </div>
+                <h2 className="text-lg font-semibold text-foreground">Transport Labour & Transporters</h2>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Manage carrier drivers, vehicle registration numbers, and fixed freight rates. These auto-sync into Delivery Challans in realtime.
+              </p>
+            </div>
+            <Button
+              onClick={() => {
+                setEditingTransporter(null);
+                setTransportModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Register Transporter / Driver
+            </Button>
+          </div>
+
+          {/* Department Quick KPI Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 bg-card border border-border rounded-xl">
+              <span className="text-xs text-muted-foreground block font-medium">Registered Transporters</span>
+              <strong className="text-xl font-bold text-foreground mt-0.5 block">{transportWorkers.length}</strong>
+              <span className="text-[11px] text-muted-foreground">Active in Logistics</span>
+            </div>
+            <div className="p-4 bg-card border border-border rounded-xl">
+              <span className="text-xs text-muted-foreground block font-medium">Fleet Vehicles</span>
+              <strong className="text-xl font-bold text-primary mt-0.5 block">
+                {new Set(transportWorkers.map(w => (w as any).vehicle_number).filter(Boolean)).size}
+              </strong>
+              <span className="text-[11px] text-muted-foreground">Active vehicles</span>
+            </div>
+            <div className="p-4 bg-card border border-border rounded-xl">
+              <span className="text-xs text-muted-foreground block font-medium">Avg Fixed Freight</span>
+              <strong className="text-xl font-bold text-foreground mt-0.5 block">
+                {transportWorkers.length ? money(Math.round(transportWorkers.reduce((s, w) => s + ((w as any).fixed_freight_charges || w.daily_rate || 0), 0) / transportWorkers.length)) : money(0)}
+              </strong>
+              <span className="text-[11px] text-muted-foreground">Per trip standard</span>
+            </div>
+            <div className="p-4 bg-card border border-border rounded-xl">
+              <span className="text-xs text-muted-foreground block font-medium">Challans Delivered</span>
+              <strong className="text-xl font-bold text-emerald-500 mt-0.5 block">
+                {d.challans.filter(c => transportWorkers.some(tw => tw.labour_name === c.transport_carrier || (tw as any).vehicle_number === c.vehicle_number)).length}
+              </strong>
+              <span className="text-[11px] text-muted-foreground">Linked shipments</span>
+            </div>
+          </div>
+
+          {/* Search Filter */}
+          <div className="filters">
+            <SearchFilter 
+              value={transportSearch} 
+              onChange={v => { setTransportSearch(v); setTransportPage(1); }} 
+              placeholder="Search transporter name, vehicle number, phone…" 
+            />
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="desktop-table-view table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Transporter / Driver</th>
+                  <th>Vehicle Number</th>
+                  <th className="numeric">Fixed Freight (₹)</th>
+                  <th>Phone Number</th>
+                  <th>Route / Unit</th>
+                  <th className="numeric">Delivered Challans</th>
+                  <th className="w-24 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedTransport.length ? paginatedTransport.map(w => {
+                  const vehicle = (w as any).vehicle_number;
+                  const freight = (w as any).fixed_freight_charges ?? w.daily_rate ?? 0;
+                  const challanCount = d.challans.filter(c => c.transport_carrier === w.labour_name || (vehicle && c.vehicle_number === vehicle)).length;
+                  return (
+                    <tr key={w.id}>
+                      <td className="font-medium text-foreground">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-md bg-secondary flex items-center justify-center text-muted-foreground">
+                            <Truck className="w-3.5 h-3.5" />
+                          </div>
+                          <span>{w.labour_name}</span>
+                        </div>
+                      </td>
+                      <td>
+                        {vehicle ? (
+                          <span className="inline-flex items-center font-mono font-semibold px-2 py-0.5 bg-secondary/80 border border-border rounded text-xs text-foreground uppercase tracking-wide">
+                            {vehicle}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs italic">No vehicle #</span>
+                        )}
+                      </td>
+                      <td className="numeric font-semibold text-foreground">
+                        {money(freight)}
+                      </td>
+                      <td>
+                        {w.phone ? (
+                          <div className="flex items-center gap-2">
+                            <a href={`tel:${w.phone}`} className="text-primary hover:underline font-mono text-xs">
+                              {w.phone}
+                            </a>
+                            <a 
+                              href={`https://wa.me/${w.phone.replace(/\D/g, '')}`} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="text-emerald-500 hover:text-emerald-400 p-1"
+                              title="Chat on WhatsApp"
+                            >
+                              <WhatsAppIcon className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="text-muted-foreground text-xs">
+                        {w.unit_assignment || 'General Logistics'}
+                      </td>
+                      <td className="numeric font-medium text-foreground">
+                        {challanCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 text-emerald-500 font-semibold">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> {challanCount}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
+                      </td>
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            title="Edit Transporter"
+                            onClick={() => {
+                              setEditingTransporter(w);
+                              setTransportModalOpen(true);
+                            }}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="icon-sm"
+                            title="Delete Transporter"
+                            onClick={() => deleteTransporter(w)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }) : (
+                  <Empty columns={7} label="No transport labour registered yet. Click 'Register Transporter' above." />
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="mobile-card-view">
+            {paginatedTransport.length ? paginatedTransport.map(w => {
+              const vehicle = (w as any).vehicle_number;
+              const freight = (w as any).fixed_freight_charges ?? w.daily_rate ?? 0;
+              const challanCount = d.challans.filter(c => c.transport_carrier === w.labour_name || (vehicle && c.vehicle_number === vehicle)).length;
+              return (
+                <div key={w.id} className="mobile-record-card">
+                  <div className="mobile-card-top">
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-4 h-4 text-primary" />
+                      <div className="mobile-card-title">{w.labour_name}</div>
+                    </div>
+                    <strong className="text-foreground text-sm">{money(freight)}</strong>
+                  </div>
+
+                  <div className="mobile-card-grid">
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Vehicle Number</span>
+                      <span className="mobile-card-value font-mono font-semibold">{vehicle || '—'}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Labour Phone</span>
+                      <span className="mobile-card-value">{w.phone || '—'}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Fixed Freight</span>
+                      <span className="mobile-card-value font-semibold text-emerald-500">{money(freight)}</span>
+                    </div>
+                    <div className="mobile-card-field">
+                      <span className="mobile-card-label">Challans</span>
+                      <span className="mobile-card-value">{challanCount} trips</span>
+                    </div>
+                  </div>
+
+                  <div className="mobile-card-actions flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => {
+                        setEditingTransporter(w);
+                        setTransportModalOpen(true);
+                      }}
+                    >
+                      <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => deleteTransporter(w)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            }) : (
+              <Empty columns={1} label="No transport labour registered yet" />
+            )}
+          </div>
+
+          <Pagination
+            currentPage={transportPage}
+            totalItems={filteredTransportWorkers.length}
+            pageSize={pageSize}
+            onPageChange={setTransportPage}
+          />
+        </div>
+      ) : (
+        <>
+          <MasterPage kind="workers" title="Production Labour Management" department="Production"/>
+          <section className="mt-8">
         <div className="section-header flex items-center justify-between gap-4">
           <h2>Production Allocations & Productivity Tracking</h2>
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -170,7 +519,7 @@ export function Labour(){
               <tr>
                 <th>Worker</th>
                 <th>Order / PO #</th>
-                <th>Box Type & Size</th>
+                <th>Product Type & Size</th>
                 <th className="numeric">Assigned</th>
                 <th className="numeric">Produced</th>
                 <th className="numeric">Pending</th>
@@ -589,6 +938,92 @@ export function Labour(){
       </section>
 
       <VolumeCharts/>
+        </>
+      )}
+
+      {/* Register / Edit Transport Labour Modal */}
+      <Dialog open={transportModalOpen} onOpenChange={open => { if(!open){ setTransportModalOpen(false); setEditingTransporter(null); } }}>
+        <DialogContent className="modal-wide" aria-describedby={undefined}>
+          <DialogTitle className="text-xl font-medium">
+            {editingTransporter ? 'Edit Transport Labour / Transporter' : 'Register Transport Labour / Transporter'}
+          </DialogTitle>
+          <div className="form-subtitle">
+            Enter transporter details and fixed freight rates. These will auto-populate in Delivery Challans upon selection.
+          </div>
+
+          <form onSubmit={saveTransporter}>
+            <div className="form-grid">
+              <label>
+                Transporter / Labour Name
+                <input
+                  name="labour_name"
+                  defaultValue={editingTransporter?.labour_name || ''}
+                  placeholder="e.g. Ramesh Sharma, Apex Logistics"
+                  required
+                />
+              </label>
+
+              <label>
+                Vehicle Number
+                <input
+                  name="vehicle_number"
+                  defaultValue={(editingTransporter as any)?.vehicle_number || ''}
+                  placeholder="e.g. MH-12-AB-1234"
+                  required
+                />
+              </label>
+
+              <label>
+                Fix Freight Charges (₹)
+                <input
+                  type="number"
+                  min={0}
+                  step=".01"
+                  name="fixed_freight_charges"
+                  defaultValue={(editingTransporter as any)?.fixed_freight_charges ?? editingTransporter?.daily_rate ?? ''}
+                  placeholder="e.g. 750"
+                  required
+                />
+              </label>
+
+              <label>
+                Labour Phone Number
+                <input
+                  type="tel"
+                  name="phone"
+                  defaultValue={editingTransporter?.phone || ''}
+                  placeholder="e.g. 9876543210"
+                />
+              </label>
+
+              <label className="col-span-full">
+                Route / Unit Assignment (Optional)
+                <input
+                  name="unit_assignment"
+                  defaultValue={editingTransporter?.unit_assignment || ''}
+                  placeholder="e.g. Factory Dedicated Truck, Pune-Mumbai Route"
+                />
+              </label>
+            </div>
+
+            <div className="form-actions">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setTransportModalOpen(false);
+                  setEditingTransporter(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={transportBusy}>
+                {transportBusy ? 'Saving…' : editingTransporter ? 'Update Transporter' : 'Register Transporter'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!selected} onOpenChange={(open)=>{ if(!open){ setSelected(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
@@ -715,7 +1150,7 @@ export function Labour(){
                       <table className="w-full">
                         <thead className="bg-secondary/40 text-muted-foreground">
                           <tr>
-                            <th className="p-2 text-left">Box Type</th>
+                            <th className="p-2 text-left">Product Type</th>
                             <th className="p-2 text-right">Assigned</th>
                             <th className="p-2 text-right">Done</th>
                             <th className="p-2 text-right">Rate</th>

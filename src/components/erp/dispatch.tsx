@@ -5,7 +5,7 @@ import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker,WhatsAppIcon,clearModalSearchParams} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker,ThemedSelect,WhatsAppIcon,clearModalSearchParams} from './common';
 import {downloadCsv,dateLabel,money,today,number,type Row} from '@/lib/erp-data';
 
 export function Dispatch(){
@@ -22,6 +22,53 @@ export function Dispatch(){
   const [historyCompany,setHistoryCompany]=useState('All');
   const [page,setPage]=useState(1);
   const pageSize=10;
+
+  // Real-time Transport Labour Sync state for Delivery Challan
+  const [selectedLabourId, setSelectedLabourId] = useState('');
+  const [carrierName, setCarrierName] = useState('');
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  const [freightCharges, setFreightCharges] = useState('');
+  const [isSyncingTransporter, setIsSyncingTransporter] = useState(false);
+
+  // Filter Transport Labour from Labour Management
+  const transportWorkers = d.workers.filter(w => 
+    (w as any).department === 'Transport' || 
+    Boolean((w as any).vehicle_number) ||
+    (w.unit_assignment && w.unit_assignment.toLowerCase().includes('transport'))
+  );
+  const otherWorkers = d.workers.filter(w => !transportWorkers.some(tw => tw.id === w.id));
+
+  // Reset fields when a new item is selected for challan
+  useEffect(() => {
+    if (selected) {
+      setSelectedLabourId('');
+      setCarrierName('');
+      setVehicleNumber('');
+      setFreightCharges('');
+      setIsSyncingTransporter(false);
+    }
+  }, [selected?.id]);
+
+  const handleSelectLabour = (labourId: string) => {
+    setSelectedLabourId(labourId);
+    if (!labourId) {
+      setCarrierName('');
+      setVehicleNumber('');
+      setFreightCharges('');
+      return;
+    }
+    setIsSyncingTransporter(true);
+    const worker = d.workers.find(w => w.id === labourId);
+    if (worker) {
+      setCarrierName(worker.labour_name || '');
+      setVehicleNumber((worker as any).vehicle_number || '');
+      const rate = (worker as any).fixed_freight_charges ?? worker.daily_rate ?? 0;
+      setFreightCharges(rate > 0 ? String(rate) : '');
+    }
+    setTimeout(() => {
+      setIsSyncingTransporter(false);
+    }, 220);
+  };
 
   const ready=d.items.filter(i=>i.completed_qty>i.dispatched_qty+i.reserved_qty);
   const company=(orderId:string)=>{
@@ -61,18 +108,26 @@ export function Dispatch(){
     if(!selected)return;
     setBusy(true);
     const f=new FormData(e.currentTarget);
+    const finalCarrier = carrierName.trim() || String(f.get('transport_carrier') || '').trim();
+    const finalVehicle = vehicleNumber.trim() || String(f.get('vehicle_number') || '').trim();
+    const finalFreight = Number(freightCharges || f.get('freight_charges')) || 0;
+
     const ok=await action('challan',{
       order_item_id:selected.id,
       dispatched_qty:Number(f.get('qty')),
-      transport_carrier:String(f.get('transport_carrier')),
-      vehicle_number:String(f.get('vehicle_number')),
-      lr_number:String(f.get('lr_number')),
-      freight_charges:Number(f.get('freight_charges')),
+      transport_carrier:finalCarrier,
+      vehicle_number:finalVehicle,
+      lr_number:String(f.get('lr_number') || ''),
+      freight_charges:finalFreight,
       dispatch_date:new Date(String(f.get('dispatch_date'))).toISOString()
     });
     setBusy(false);
     if(ok){
       setSelected(null);
+      setSelectedLabourId('');
+      setCarrierName('');
+      setVehicleNumber('');
+      setFreightCharges('');
       setTab('history');
     }
   }
@@ -174,7 +229,7 @@ export function Dispatch(){
                     <Checkbox aria-label="Select all" />
                   </th>
                   <th>Client / PO</th>
-                  <th>Box Type & Dimensions</th>
+                  <th>Product Type & Dimensions</th>
                   <th className="numeric">Ordered</th>
                   <th className="numeric">Produced</th>
                   <th className="numeric">Dispatched</th>
@@ -532,7 +587,7 @@ export function Dispatch(){
       <VolumeCharts dispatch/>
 
       {/* Create Delivery Challan Dialog */}
-      <Dialog open={!!selected} onOpenChange={(open)=>{ if(!open){ setSelected(null); clearModalSearchParams(); } }}>
+      <Dialog open={!!selected} onOpenChange={(open)=>{ if(!open){ setSelected(null); setSelectedLabourId(''); setCarrierName(''); setVehicleNumber(''); setFreightCharges(''); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Create Delivery Challan</DialogTitle>
           <div className="form-subtitle">
@@ -540,6 +595,97 @@ export function Dispatch(){
           </div>
 
           <form onSubmit={submit}>
+            {/* Quick Transport Labour Real-time Selector */}
+            <div className="p-3.5 bg-secondary/30 border border-border/80 rounded-xl my-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-primary" />
+                  Select Transport Labour / Transporter
+                </label>
+                {isSyncingTransporter ? (
+                  <span className="text-[11px] font-medium text-primary flex items-center gap-1.5 animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                    Fetching from Labour Management…
+                  </span>
+                ) : selectedLabourId ? (
+                  <span className="text-[11px] font-medium text-emerald-500 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Realtime Synced
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    Auto-populates vehicle, freight & carrier
+                  </span>
+                )}
+              </div>
+
+              {/* Seamless micro progress loading bar */}
+              {isSyncingTransporter && (
+                <div className="w-full bg-muted h-1 rounded-full overflow-hidden">
+                  <div className="bg-primary h-full w-2/3 animate-[progress_0.8s_ease-in-out_infinite]" />
+                </div>
+              )}
+
+              <ThemedSelect
+                value={selectedLabourId}
+                onChange={handleSelectLabour}
+                options={[
+                  { value: '', label: 'Select registered transport labour / transporter…' },
+                  ...transportWorkers.map(w => ({
+                    value: w.id,
+                    label: `${w.labour_name}${((w as any).vehicle_number) ? ` • ${(w as any).vehicle_number}` : ''}${(((w as any).fixed_freight_charges || w.daily_rate)) ? ` (₹${(w as any).fixed_freight_charges || w.daily_rate})` : ''}`
+                  })),
+                  ...(otherWorkers.length > 0 ? [
+                    { value: '', label: '── Other Factory Workers ──', disabled: true },
+                    ...otherWorkers.map(w => ({
+                      value: w.id,
+                      label: `${w.labour_name} (General Floor)`
+                    }))
+                  ] : [])
+                ]}
+              />
+
+              {/* Live Info Card of Selected Transporter */}
+              {(() => {
+                const worker = d.workers.find(w => w.id === selectedLabourId);
+                if (!worker) return null;
+                const veh = (worker as any).vehicle_number;
+                const freight = (worker as any).fixed_freight_charges ?? worker.daily_rate ?? 0;
+                return (
+                  <div className="p-2.5 bg-background border border-border/80 rounded-lg flex items-center justify-between gap-3 text-xs mt-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Truck className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-foreground truncate">{worker.labour_name}</div>
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                          {veh ? (
+                            <span className="font-mono bg-muted/60 px-1 py-0.2 rounded text-[10px] text-foreground border border-border/50">
+                              {veh}
+                            </span>
+                          ) : (
+                            <span>No vehicle #</span>
+                          )}
+                          {worker.phone && (
+                            <span className="flex items-center gap-1 font-mono">
+                              📞 {worker.phone}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Fixed Freight</span>
+                      <strong className="text-emerald-500 font-semibold text-sm">
+                        {money(freight)}
+                      </strong>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
             <div className="form-grid">
               <label>
                 Quantity to Dispatch
@@ -560,12 +706,23 @@ export function Dispatch(){
 
               <label>
                 Transporter / Carrier Name
-                <input name="transport_carrier" placeholder="e.g. VRL Logistics, Self Pickup" required/>
+                <input
+                  name="transport_carrier"
+                  value={carrierName}
+                  onChange={e => setCarrierName(e.target.value)}
+                  placeholder="e.g. VRL Logistics, Self Pickup"
+                  required
+                />
               </label>
 
               <label>
                 Vehicle Number
-                <input name="vehicle_number" placeholder="e.g. MH-12-AB-1234"/>
+                <input
+                  name="vehicle_number"
+                  value={vehicleNumber}
+                  onChange={e => setVehicleNumber(e.target.value)}
+                  placeholder="e.g. MH-12-AB-1234"
+                />
               </label>
 
               <label>
@@ -575,12 +732,32 @@ export function Dispatch(){
 
               <label>
                 Freight Charges (₹)
-                <input name="freight_charges" type="number" min={0} step=".01" placeholder="e.g. 500" />
+                <input
+                  name="freight_charges"
+                  type="number"
+                  min={0}
+                  step=".01"
+                  value={freightCharges}
+                  onChange={e => setFreightCharges(e.target.value)}
+                  placeholder="e.g. 500"
+                />
               </label>
             </div>
 
             <div className="form-actions">
-              <Button variant="outline" type="button" onClick={()=>setSelected(null)}>Cancel</Button>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={()=>{
+                  setSelected(null);
+                  setSelectedLabourId('');
+                  setCarrierName('');
+                  setVehicleNumber('');
+                  setFreightCharges('');
+                }}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={busy}>{busy?'Generating…':'Generate Challan'}</Button>
             </div>
           </form>
@@ -627,7 +804,7 @@ export function Dispatch(){
                   <thead>
                     <tr>
                       <th>Serial</th>
-                      <th>Box Type</th>
+                      <th>Product Type</th>
                       <th>Dimensions</th>
                       <th>Dispatched Qty</th>
                     </tr>

@@ -66,6 +66,7 @@ export type Database = {
           status: string
           transport_carrier: string | null
           vehicle_number: string | null
+          transporter_id: string | null
         }
         Insert: {
           challan_number?: string
@@ -79,6 +80,7 @@ export type Database = {
           status?: string
           transport_carrier?: string | null
           vehicle_number?: string | null
+          transporter_id?: string | null
         }
         Update: {
           challan_number?: string
@@ -92,6 +94,7 @@ export type Database = {
           status?: string
           transport_carrier?: string | null
           vehicle_number?: string | null
+          transporter_id?: string | null
         }
         Relationships: [
           {
@@ -241,6 +244,9 @@ export type Database = {
           labour_name: string
           phone: string | null
           unit_assignment: string | null
+          department: string | null
+          vehicle_number: string | null
+          fixed_freight_charges: number | null
         }
         Insert: {
           created_at?: string | null
@@ -249,6 +255,9 @@ export type Database = {
           labour_name: string
           phone?: string | null
           unit_assignment?: string | null
+          department?: string | null
+          vehicle_number?: string | null
+          fixed_freight_charges?: number | null
         }
         Update: {
           created_at?: string | null
@@ -257,6 +266,9 @@ export type Database = {
           labour_name?: string
           phone?: string | null
           unit_assignment?: string | null
+          department?: string | null
+          vehicle_number?: string | null
+          fixed_freight_charges?: number | null
         }
         Relationships: []
       }

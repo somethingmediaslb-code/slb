@@ -193,7 +193,7 @@ export const mainNav = [
 
 export const mastersNav = [
   { to: '/parties', label: 'Party Master', icon: Building2, key: 'parties' },
-  { to: '/box-types', label: 'Box Types', icon: Package, key: 'catalog' },
+  { to: '/box-types', label: 'Product Types', icon: Package, key: 'catalog' },
   { to: '/labour', label: 'Labour Management', icon: Users, key: 'workers' },
 ] as const;
 

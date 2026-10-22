@@ -1,11 +1,11 @@
 import {useState, useEffect, useRef} from 'react';
 import {useSearch, useNavigate} from '@tanstack/react-router';
-import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search,Download,Check,Ban} from 'lucide-react';
+import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search,Download,Check,Ban,Copy} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
-import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
+import {cn} from '@/lib/utils';
 import {useFactory} from './provider';
 import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,Pill,ViewTabs,FilterToken,TableCalcBar,CrmTag,SegmentedMeter,ThemedSelect,ThemedDatePicker,SegmentedControl,Pagination,MiniSparkline,WhatsAppIcon,clearModalSearchParams,BoxDimensionInput} from './common';
 import {money,number,dateLabel,today,downloadCsv,type Row} from '@/lib/erp-data';
@@ -71,7 +71,7 @@ function BoxTypePicker({
         <input
           required={required}
           value={value}
-          placeholder="Search or enter box type…"
+          placeholder="Search or enter product type…"
           autoComplete="off"
           className={`w-full pr-10 ${
             open
@@ -114,7 +114,7 @@ function BoxTypePicker({
         <button
           type="button"
           tabIndex={-1}
-          aria-label="Toggle box types dropdown"
+          aria-label="Toggle product types dropdown"
           onClick={() => setOpen(prev => !prev)}
           className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
@@ -131,18 +131,18 @@ function BoxTypePicker({
         <div
           className="absolute top-full left-0 right-0 z-50 -mt-px bg-card text-card-foreground border border-t-0 border-primary rounded-b-xl shadow-2xl overflow-hidden animate-in fade-in-0 duration-150"
         >
-          {/* Instruction Bar: Search for a specific box type */}
+          {/* Instruction Bar: Search for a specific product type */}
           <div className="px-3.5 py-1.5 bg-muted/40 border-b border-border/70 flex items-center justify-between text-xs text-muted-foreground select-none">
             <span className="flex items-center gap-1.5 font-medium text-[11px] text-muted-foreground">
               <Search className="w-3 h-3 text-primary shrink-0" />
-              <span>Search for a specific box type</span>
+              <span>Search for a specific product type</span>
             </span>
             <span className="text-[10px] font-mono text-muted-foreground/80">
               {visibleOptions.length} of {catalog.length}
             </span>
           </div>
 
-          {/* Options List (Strictly box type name, nothing else) */}
+          {/* Options List (Strictly product type name, nothing else) */}
           <div className="max-h-56 overflow-y-auto divide-y divide-border/20">
             {filtered.length > 0 ? (
               visibleOptions.map((item, idx) => {
@@ -174,14 +174,14 @@ function BoxTypePicker({
               })
             ) : catalog.length > 0 ? (
               <div className="p-3.5 text-center text-xs text-muted-foreground select-none">
-                <div>No configured box type matches &quot;{value}&quot;</div>
+                <div>No configured product type matches &quot;{value}&quot;</div>
                 <div className="mt-1 text-[11px] text-primary font-medium">
                   Will use custom: &quot;{value}&quot;
                 </div>
               </div>
             ) : (
               <div className="p-3.5 text-center text-xs text-muted-foreground select-none">
-                No configured box types yet.
+                No configured product types yet.
               </div>
             )}
           </div>
@@ -296,7 +296,9 @@ export function Orders(){
     const matchesParty = partyFilter === 'All' || (o.is_self_stock && partyFilter === 'self') || o.party_id === partyFilter;
     const matchesMedium = mediumFilter === 'All' || o.medium === mediumFilter;
     const compName = company(o.party_id, o.is_self_stock);
-    const matchesSearch = (o.order_no + ' ' + compName + ' ' + (o.remarks ?? '')).toLowerCase().includes(search.toLowerCase());
+    const orderItems = d.items.filter(i => i.order_id === o.id);
+    const itemDetails = orderItems.map(i => `${i.box_type} ${i.specification ?? ''}`).join(' ');
+    const matchesSearch = (o.order_no + ' ' + compName + ' ' + itemDetails + ' ' + (o.remarks ?? '')).toLowerCase().includes(search.toLowerCase());
     return matchesParty && matchesMedium && matchesSearch;
   });
 
@@ -355,7 +357,7 @@ export function Orders(){
     for(let i=0;i<lines.length;i++){
       const l=lines[i];
       if(!l || !l.box_type.trim()){
-        toast.error(`Item #${i+1}: Please select or enter a box type.`);
+        toast.error(`Item #${i+1}: Please select or enter a product type.`);
         return;
       }
       if(!l.size_dimensions || !l.size_dimensions.trim()){
@@ -501,25 +503,22 @@ export function Orders(){
                                 <div className="deals-card-title truncate">
                                   {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
                                 </div>
-                                <div className="deals-card-sub">{o.order_no}</div>
                               </div>
                             </div>
                             <Pill value={o.status} />
                           </div>
 
-                          <div className="deals-card-tags">
-                            {firstItem?.specification ? (
-                              <CrmTag label={firstItem.specification} variant="blue" />
-                            ) : (
-                              <CrmTag label="Wooden Box" variant="neutral" />
+                          <div className="text-xs font-medium text-foreground py-0.5">
+                            {firstItem?.box_type || 'Standard Box'}
+                            {items.length > 1 && (
+                              <span className="text-[11px] font-normal text-muted-foreground ml-1.5">
+                                (+{items.length - 1})
+                              </span>
                             )}
-                            {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
-                            {o.medium && <CrmTag label={o.medium} variant="green" />}
                           </div>
 
                           <div className="deals-card-metric">
-                            <span className="text-muted-foreground">{number(ordered)} boxes</span>
-                            <strong>{money(value)}</strong>
+                            <span className="text-muted-foreground font-medium">{number(ordered)} boxes</span>
                           </div>
 
                           <div className="deals-card-footer">
@@ -552,23 +551,18 @@ export function Orders(){
                   <th className="w-8">
                     <Checkbox aria-label="Select all" />
                   </th>
-                  <th>Order ID</th>
-                  <th>Customer / Account</th>
-                  <th>Spec & Tags</th>
-                  <th>Order Date</th>
+                  <th>Customer Name</th>
+                  <th>Product Type</th>
+                  <th className="numeric">QTY of Boxes</th>
                   <th>Due Date</th>
-                  <th className="numeric">Units</th>
-                  <th className="numeric">Order Value</th>
                   <th>Status</th>
-                  <th className="w-8 text-right"><span className="sr-only">Actions</span></th>
+                  <th className="w-20 text-right"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.length ? paginated.map(o=>{
                   const items=d.items.filter(i=>i.order_id===o.id);
                   const ordered=items.reduce((s,i)=>s+i.ordered_qty,0);
-                  const completed=items.reduce((s,i)=>s+i.completed_qty,0);
-                  const value=items.reduce((s,i)=>s+(i.total_price??0),0);
                   const firstItem=items[0];
                   return (
                     <tr
@@ -580,32 +574,26 @@ export function Orders(){
                       <td onClick={e=>e.stopPropagation()}>
                         <Checkbox aria-label={`Select ${o.order_no}`} />
                       </td>
-                      <td className="font-medium text-foreground">{o.order_no}</td>
                       <td>
-                        <span className="font-medium text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
+                        <span className="font-semibold text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
                       </td>
                       <td>
                         <div className="flex items-center gap-1.5 whitespace-nowrap">
-                          {firstItem?.specification ? (
-                            <CrmTag label={firstItem.specification} variant="blue" />
-                          ) : (
-                            <CrmTag label="Wooden Box" variant="neutral" />
+                          <span className="font-medium text-foreground">{firstItem?.box_type || 'Standard Box'}</span>
+                          {items.length > 1 && (
+                            <span className="text-[11px] font-normal text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded border border-border/60">
+                              +{items.length - 1} more
+                            </span>
                           )}
-                          {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
-                          {items.length > 1 && <CrmTag label={`+${items.length - 1}`} variant="neutral" />}
                         </div>
                       </td>
-                      <td>
-                        <div className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span className="text-foreground">{dateLabel(o.order_date)}</span>
-                          <span className="text-muted-foreground/60">|</span>
-                          <span className="text-muted-foreground">{o.medium || 'Direct'}</span>
+                      <td className="numeric font-medium text-foreground">{number(ordered)}</td>
+                      <td className="text-xs text-muted-foreground whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-muted-foreground/70" />
+                          <span>{dateLabel(o.expected_date)}</span>
                         </div>
                       </td>
-                      <td className="text-xs text-muted-foreground whitespace-nowrap">{dateLabel(o.expected_date)}</td>
-                      <td className="numeric font-medium">{number(ordered)}</td>
-                      <td className="numeric font-medium text-foreground">{money(value)}</td>
                       <td><Pill value={o.status}/></td>
                       <td className="text-right" onClick={e=>e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-1">
@@ -632,21 +620,18 @@ export function Orders(){
                     </tr>
                   );
                 }) : (
-                  <Empty columns={10} label="No matching orders found"/>
+                  <Empty columns={7} label="No matching orders found"/>
                 )}
               </tbody>
               <tfoot>
                 <tr className="border-t border-border bg-muted/20 font-medium">
-                  <td colSpan={6} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
+                  <td colSpan={3} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
                     Totals ({number(filtered.length)} orders):
                   </td>
-                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
+                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
                     {number(totalVolume)}
                   </td>
-                  <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
-                    {money(totalValue)}
-                  </td>
-                  <td colSpan={2} />
+                  <td colSpan={3} />
                 </tr>
               </tfoot>
             </table>
@@ -657,8 +642,6 @@ export function Orders(){
             {paginated.length ? paginated.map(o => {
               const items = d.items.filter(i => i.order_id === o.id);
               const ordered = items.reduce((s, i) => s + i.ordered_qty, 0);
-              const completed = items.reduce((s, i) => s + i.completed_qty, 0);
-              const value = items.reduce((s, i) => s + (i.total_price ?? 0), 0);
               const firstItem = items[0];
               return (
                 <div
@@ -668,32 +651,21 @@ export function Orders(){
                 >
                   <div className="mobile-card-top">
                     <div className="mobile-card-title-group">
-                      <div className="flex items-center gap-2">
-                        <div className="mobile-card-title">
-                          {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
-                        </div>
+                      <div className="mobile-card-title">
+                        {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
                       </div>
-                      <div className="mobile-card-sub">{o.order_no} · {dateLabel(o.order_date)}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 font-medium">
+                        {firstItem?.box_type || 'Standard Box'}
+                        {items.length > 1 && ` (+${items.length - 1} more)`}
+                      </div>
                     </div>
                     <Pill value={o.status} />
                   </div>
 
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {firstItem?.specification && (
-                      <CrmTag label={firstItem.specification} variant="blue" />
-                    )}
-                    {firstItem?.priority_signal === 'Red' && <CrmTag label="Urgent" variant="red" />}
-                    {o.medium && <CrmTag label={o.medium} variant="green" />}
-                  </div>
-
                   <div className="mobile-card-grid">
                     <div className="mobile-card-field">
-                      <span className="mobile-card-label">Units</span>
-                      <span className="mobile-card-value">{number(ordered)}</span>
-                    </div>
-                    <div className="mobile-card-field">
-                      <span className="mobile-card-label">Order Value</span>
-                      <span className="mobile-card-value">{money(value)}</span>
+                      <span className="mobile-card-label">QTY of Boxes</span>
+                      <span className="mobile-card-value font-medium">{number(ordered)}</span>
                     </div>
                     <div className="mobile-card-field">
                       <span className="mobile-card-label">Due Date</span>
@@ -701,14 +673,31 @@ export function Orders(){
                     </div>
                   </div>
 
-                  <div className="mobile-card-actions justify-end">
-                    <button
-                      type="button"
-                      className="crm-btn crm-btn-secondary !h-7 !text-xs !px-3"
-                      onClick={(e) => { e.stopPropagation(); setViewOrderId(o.id); }}
+                  <div className="mobile-card-actions justify-end gap-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-2.5 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        sendOrderWhatsApp(o, items, d.parties.find(p => p.id === o.party_id));
+                      }}
                     >
-                      Inspect
-                    </button>
+                      <WhatsAppIcon className="w-3.5 h-3.5" />
+                      <span>WhatsApp</span>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setViewOrderId(o.id);
+                      }}
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5" />
+                      <span>Details</span>
+                    </Button>
                   </div>
                 </div>
               );
@@ -729,290 +718,283 @@ export function Orders(){
       )}
 
 
-      {/* Slide-over Inspection Sheet (CRM Details Drawer - Screenshot 5) */}
-      <Sheet open={!!viewOrderId} onOpenChange={handleViewOrderChange}>
-        <SheetContent side="right" className="sm:max-w-xl w-full p-0 flex flex-col bg-card overflow-hidden h-[100dvh] max-h-[100dvh] inset-y-0 right-0">
+      {/* Super Clean Order Information & Inspection Dialog */}
+      <Dialog open={!!viewOrderId} onOpenChange={handleViewOrderChange}>
+        <DialogContent className="modal-wide max-w-3xl" aria-describedby={undefined}>
           {activeOrder && (
-            <>
-              <div className="p-4 sm:p-6 pr-14 border-b border-border bg-background shrink-0">
-                <SheetHeader className="text-left">
-                  <div className="drawer-hero-box">
-                    <div className="drawer-hero-monogram">
-                      {activeOrder.is_self_stock ? 'SS' : company(activeOrder.party_id).slice(0, 2).toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <SheetTitle className="text-lg sm:text-xl font-medium tracking-tight">
-                          {activeOrder.order_no}
-                        </SheetTitle>
-                        <Pill value={activeOrder.status} />
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        <CrmTag label={activeOrder.is_self_stock ? 'Internal Factory Stock' : company(activeOrder.party_id)} variant="blue" />
-                        {activeItems[0]?.specification && <CrmTag label={activeItems[0].specification} variant="purple" />}
-                        {activeItems.some(i => i.priority_signal === 'Red') && <CrmTag label="High Priority" variant="red" />}
-                      </div>
-                    </div>
+            <div className="space-y-5">
+              {/* Clean Dialog Header with Hidden Info (Order ID, Order Date, Channel) */}
+              <div className="pr-12 pb-3 border-b border-border">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight text-foreground m-0">
+                    {activeOrder.is_self_stock ? 'Self Stocking Order' : company(activeOrder.party_id)}
+                  </DialogTitle>
+                  <Pill value={activeOrder.status} />
+                </div>
+                <div className="flex items-center gap-2 sm:gap-3 mt-2 text-xs text-muted-foreground flex-wrap">
+                  <div className="flex items-center gap-1.5 font-mono text-foreground font-medium bg-secondary/80 px-2 py-0.5 rounded border border-border/70">
+                    <span>{activeOrder.order_no}</span>
+                    <button
+                      type="button"
+                      className="hover:text-primary transition-colors cursor-pointer"
+                      title="Copy Order ID"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeOrder.order_no);
+                        toast.success(`Copied ${activeOrder.order_no} to clipboard`);
+                      }}
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
                   </div>
-                </SheetHeader>
-              </div>
-
-              <div
-                className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4 sm:space-y-6"
-                style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
-              >
-                {/* Operational Production & Dispatch State */}
-                <div>
-                  <div className="drawer-section-label">Production & Dispatch State</div>
-                  <div className="p-4 bg-background border border-border rounded-xl space-y-4 shadow-sm">
-                    {/* Overall Progress */}
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-2">
-                        <span className="font-semibold text-foreground flex items-center gap-1.5">
-                          <Package className="w-4 h-4 text-primary" />
-                          Production Completion
-                        </span>
-                        <span className="font-semibold tabular-nums text-foreground">
-                          {activeProductionPercent}% Produced
-                        </span>
-                      </div>
-                      <div className="w-full h-2.5 rounded-full bg-secondary overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                          style={{ width: `${activeProductionPercent}%` }}
-                        />
-                      </div>
-                      <div className="flex justify-between items-center text-[11px] text-muted-foreground mt-1.5">
-                        <span>{number(activeCompletedQty)} of {number(activeTotalQty)} units produced</span>
-                        <span>{number(activePendingQty)} units pending in queue</span>
-                      </div>
-                    </div>
-
-                    {/* Operational 4-Card Metrics Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 pt-2 border-t border-border/70">
-                      <div className="p-2.5 sm:p-3 bg-secondary/30 border border-border/60 rounded-lg">
-                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-1">
-                          Total Ordered
-                        </div>
-                        <div className="text-base sm:text-lg font-bold text-foreground tabular-nums">
-                          {number(activeTotalQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 sm:p-3 bg-emerald-500/5 border border-emerald-500/20 rounded-lg">
-                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-emerald-600 dark:text-emerald-400 font-medium mb-1">
-                          Produced
-                        </div>
-                        <div className="text-base sm:text-lg font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                          {number(activeCompletedQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 sm:p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
-                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-amber-600 dark:text-amber-400 font-medium mb-1">
-                          Pending Prod.
-                        </div>
-                        <div className="text-base sm:text-lg font-bold text-amber-600 dark:text-amber-400 tabular-nums">
-                          {number(activePendingQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
-                        </div>
-                      </div>
-
-                      <div className="p-2.5 sm:p-3 bg-blue-500/5 border border-blue-500/20 rounded-lg">
-                        <div className="text-[10px] sm:text-[11px] uppercase tracking-wider text-blue-600 dark:text-blue-400 font-medium mb-1">
-                          Dispatched
-                        </div>
-                        <div className="text-base sm:text-lg font-bold text-blue-600 dark:text-blue-400 tabular-nums">
-                          {number(activeDispatchedQty)} <span className="text-xs font-normal text-muted-foreground">units</span>
-                        </div>
-                      </div>
-                    </div>
+                  <span className="text-muted-foreground/40">•</span>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Order Date: <strong className="text-foreground font-medium">{dateLabel(activeOrder.order_date)}</strong></span>
+                  </div>
+                  <span className="text-muted-foreground/40">•</span>
+                  <div className="flex items-center gap-1">
+                    <span>Channel: <strong className="text-foreground font-medium">{activeOrder.medium || 'Direct'}</strong></span>
                   </div>
                 </div>
+              </div>
 
-                {/* Order Details & Schedule */}
-                <div>
-                  <div className="drawer-section-label">Order Details & Schedule</div>
-                  <div className="p-4 bg-background border border-border rounded-xl space-y-3.5 shadow-sm">
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs">
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5">Client / Account</span>
-                        <strong className="text-foreground text-sm font-semibold block">
-                          {activeOrder.is_self_stock ? 'Internal Factory Stock' : company(activeOrder.party_id)}
-                        </strong>
-                        <span className="text-[11px] text-muted-foreground">
-                          {activeOrder.is_self_stock ? 'Self Stocking' : 'Commercial Client'}
-                        </span>
-                      </div>
+              {/* 1. Key Metrics Cards (Hidden Order Value & Quantities Highlighted) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                <div className="p-3 sm:p-3.5 rounded-xl bg-secondary/30 border border-border shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                    Total Order Value
+                  </span>
+                  <div className="text-base sm:text-lg font-bold text-foreground">
+                    {money(activeTotalValue)}
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-muted-foreground block mt-0.5">
+                    {activeItems.length} line item{activeItems.length === 1 ? '' : 's'}
+                  </span>
+                </div>
 
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5">Total Order Value</span>
-                        <strong className="text-foreground text-sm font-semibold block">
-                          {money(activeTotalValue)}
-                        </strong>
-                        <span className="text-[11px] text-muted-foreground">
-                          {activeItems.length} line item{activeItems.length === 1 ? '' : 's'}
-                        </span>
-                      </div>
+                <div className="p-3 sm:p-3.5 rounded-xl bg-secondary/30 border border-border shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                    Total Quantity
+                  </span>
+                  <div className="text-base sm:text-lg font-bold text-foreground">
+                    {number(activeTotalQty)} <span className="text-xs font-normal text-muted-foreground">boxes</span>
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-emerald-600 dark:text-emerald-400 font-medium block mt-0.5">
+                    {number(activeCompletedQty)} produced ({activeProductionPercent}%)
+                  </span>
+                </div>
 
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5">Order Date</span>
-                        <div className="flex items-center gap-1.5 font-medium text-foreground">
-                          <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>{dateLabel(activeOrder.order_date)}</span>
-                        </div>
-                      </div>
+                <div className="p-3 sm:p-3.5 rounded-xl bg-secondary/30 border border-border shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                    Due / Delivery Date
+                  </span>
+                  <div className="text-base sm:text-lg font-semibold text-foreground">
+                    {dateLabel(activeOrder.expected_date)}
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-muted-foreground block mt-0.5">
+                    Target schedule
+                  </span>
+                </div>
 
-                      <div>
-                        <span className="text-muted-foreground block mb-0.5">Due / Delivery Date</span>
-                        <div className="flex items-center gap-1.5 font-medium text-foreground">
-                          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                          <span>{dateLabel(activeOrder.expected_date)}</span>
-                        </div>
-                      </div>
-                    </div>
+                <div className="p-3 sm:p-3.5 rounded-xl bg-secondary/30 border border-border shadow-xs">
+                  <span className="text-[10px] sm:text-[11px] font-medium text-muted-foreground uppercase tracking-wider block mb-1">
+                    Production Queue
+                  </span>
+                  <div className="text-base sm:text-lg font-semibold text-foreground">
+                    {number(activePendingQty)} <span className="text-xs font-normal text-muted-foreground">pending</span>
+                  </div>
+                  <span className="text-[10px] sm:text-[11px] text-muted-foreground block mt-0.5">
+                    {number(activeDispatchedQty)} dispatched
+                  </span>
+                </div>
+              </div>
 
-                    {activeOrder.remarks && (
-                      <div className="pt-3 border-t border-border/70 flex items-start gap-2 text-xs">
-                        <ClipboardList className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                        <div>
-                          <span className="font-semibold text-foreground block">Production Notes & Instructions:</span>
-                          <span className="text-muted-foreground whitespace-pre-wrap">{activeOrder.remarks}</span>
-                        </div>
-                      </div>
+              {/* 2. Hidden Specifications & Tags Card */}
+              <div className="rounded-xl border border-border bg-card p-3.5 sm:p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Specifications & Order Attributes
+                  </span>
+                  {activeItems.some(i => i.priority_signal === 'Red') ? (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-500 border border-rose-500/20">
+                      Urgent Priority
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-secondary text-muted-foreground border border-border/60">
+                      Standard Priority
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-secondary/40 border border-border/60">
+                    <span className="text-muted-foreground text-[11px] block mb-1 font-medium">Timber / Plywood Specification:</span>
+                    <p className="text-foreground font-medium leading-relaxed">
+                      {activeItems[0]?.specification || 'Standard Factory Spec (Untreated / Plain)'}
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-lg bg-secondary/40 border border-border/60 space-y-1">
+                    <span className="text-muted-foreground text-[11px] block font-medium">Customer Contact & Channel:</span>
+                    <p className="text-foreground font-medium">
+                      {activeParty?.phone_number ? `${activeParty.phone_number} · via ${activeOrder.medium || 'Direct'}` : (activeOrder.medium ? `Via ${activeOrder.medium}` : 'Direct Order')}
+                    </p>
+                    {activeParty?.gstin && (
+                      <p className="text-[11px] text-muted-foreground font-mono">GSTIN: {activeParty.gstin}</p>
                     )}
                   </div>
                 </div>
 
-                {/* Line Items & Specifications */}
-                <div>
-                  <div className="drawer-section-label">Line Items & Specifications ({activeItems.length})</div>
-                  <div className="space-y-3">
-                    {activeItems.map((item, idx) => {
-                      const itemPercent = item.ordered_qty > 0 ? Math.min(100, Math.round((item.completed_qty / item.ordered_qty) * 100)) : 0;
-                      const itemPending = Math.max(0, item.ordered_qty - item.completed_qty);
-                      return (
-                        <div key={item.id || idx} className="p-3.5 bg-background border border-border rounded-xl space-y-2.5 shadow-sm">
-                          <div className="flex justify-between items-start gap-2">
-                            <div>
-                              <span className="font-semibold text-foreground text-sm block">{item.box_type}</span>
-                              <span className="font-mono text-xs text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded inline-block mt-0.5">
-                                {item.size_dimensions}
-                              </span>
-                            </div>
-                            <Pill value={item.priority_signal} />
-                          </div>
-
-                          {item.specification && (
-                            <div className="text-xs text-muted-foreground bg-secondary/50 px-2.5 py-1.5 rounded-md border border-border/50">
-                              <span className="font-medium text-foreground">Specification: </span>
-                              {item.specification}
-                            </div>
-                          )}
-
-                          {item.code_remarks && (
-                            <div className="text-[11px] text-muted-foreground">
-                              <span className="font-medium text-foreground">Code/Remarks: </span>
-                              {item.code_remarks}
-                            </div>
-                          )}
-
-                          {/* Progress bar per item */}
-                          <div className="pt-1">
-                            <div className="flex justify-between items-center text-[11px] mb-1">
-                              <span className="text-muted-foreground">
-                                Produced: <strong className="text-foreground">{number(item.completed_qty)}</strong> / {number(item.ordered_qty)} pcs
-                              </span>
-                              <span className="font-medium text-foreground tabular-nums">
-                                {itemPercent}%
-                              </span>
-                            </div>
-                            <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden">
-                              <div
-                                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
-                                style={{ width: `${itemPercent}%` }}
-                              />
-                            </div>
-                          </div>
-
-                          {/* Operational item metrics */}
-                          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 pt-2 border-t border-border/70 text-[11px]">
-                            <div>
-                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Ordered</span>
-                              <strong className="text-foreground text-xs sm:text-sm">{number(item.ordered_qty)}</strong>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Pending</span>
-                              <strong className={`text-xs sm:text-sm ${itemPending > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                {number(itemPending)}
-                              </strong>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Rate</span>
-                              <strong className="text-foreground text-xs sm:text-sm">{money(item.unit_rate)}</strong>
-                            </div>
-                            <div className="text-right">
-                              <span className="text-muted-foreground block text-[10px] sm:text-[11px]">Total</span>
-                              <strong className="text-foreground text-xs sm:text-sm font-semibold">
-                                {money(item.total_price ?? (item.ordered_qty * item.unit_rate))}
-                              </strong>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                {activeOrder.remarks && (
+                  <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs">
+                    <span className="font-semibold text-amber-600 dark:text-amber-400 block mb-0.5">
+                      Production Notes & Instructions:
+                    </span>
+                    <p className="text-foreground whitespace-pre-wrap">{activeOrder.remarks}</p>
                   </div>
+                )}
+              </div>
+
+              {/* 3. Box Line Items & Pricing Table */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                <div className="px-3.5 py-2.5 border-b border-border bg-muted/30 flex items-center justify-between">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Box Line Items ({activeItems.length})
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    Total Value: <strong className="text-foreground font-semibold">{money(activeTotalValue)}</strong>
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/10 text-muted-foreground text-left">
+                        <th className="py-2 px-3 w-8">#</th>
+                        <th className="py-2 px-3">Product Type</th>
+                        <th className="py-2 px-3">Size Dimensions</th>
+                        <th className="py-2 px-3">Specification</th>
+                        <th className="py-2 px-3 text-right">Ordered</th>
+                        <th className="py-2 px-3 text-right">Unit Rate</th>
+                        <th className="py-2 px-3 text-right">Total Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {activeItems.map((item, idx) => (
+                        <tr key={item.id || idx} className="hover:bg-muted/10 transition-colors">
+                          <td className="py-2.5 px-3 text-muted-foreground font-mono">{item.sr_no || idx + 1}</td>
+                          <td className="py-2.5 px-3 font-medium text-foreground">
+                            {item.box_type}
+                            {item.code_remarks && (
+                              <span className="block text-[11px] text-muted-foreground font-normal">
+                                {item.code_remarks}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 font-mono text-muted-foreground">
+                            {item.size_dimensions || '—'}
+                          </td>
+                          <td className="py-2.5 px-3 text-muted-foreground">
+                            {item.specification ? (
+                              <span className="px-1.5 py-0.5 rounded bg-secondary text-foreground text-[11px]">
+                                {item.specification}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-medium text-foreground">
+                            {number(item.ordered_qty)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-muted-foreground">
+                            {money(item.unit_rate)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-semibold text-foreground">
+                            {money(item.total_price ?? (item.ordered_qty * item.unit_rate))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
-              {/* Pinned Footer: Mobile screen has only icons, desktop screen has icon + text */}
-              <div className="p-3 sm:p-4 border-t border-border bg-background flex justify-between items-center gap-2 shrink-0">
+              {/* 4. Production Progress Bar */}
+              <div className="p-3.5 sm:p-4 rounded-xl border border-border bg-card space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-primary" />
+                    Manufacturing & Dispatch Fulfillment
+                  </span>
+                  <span className="font-semibold text-foreground tabular-nums">
+                    {number(activeCompletedQty)} / {number(activeTotalQty)} boxes ({activeProductionPercent}%)
+                  </span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-secondary overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                    style={{ width: `${activeProductionPercent}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-[11px] text-muted-foreground">
+                  <span>{number(activeDispatchedQty)} boxes dispatched</span>
+                  <span>{number(activePendingQty)} boxes pending</span>
+                </div>
+              </div>
+
+              {/* 5. Clean Dialog Footer Actions */}
+              <div className="pt-3 border-t border-border flex items-center justify-between gap-3">
                 <div>
                   {isAdmin && activeOrder.status !== 'Completed' && activeOrder.status !== 'Cancelled' && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-destructive/60 text-destructive hover:bg-destructive/10 hover:text-destructive h-9 px-2.5 sm:px-3 gap-1.5"
-                      title="Close order short"
-                      aria-label="Close order short"
+                      className="border-destructive/50 text-destructive hover:bg-destructive/10 text-xs h-8 px-2.5 gap-1.5"
                       onClick={() => {
                         setCloseShortOrderId(activeOrder.id);
                         setCloseShortReason('');
                       }}
                     >
-                      <Ban className="w-4 h-4 text-destructive shrink-0" />
-                      <span className="hidden sm:inline">Close short</span>
+                      <Ban className="w-3.5 h-3.5" />
+                      <span>Close Short</span>
                     </Button>
                   )}
                 </div>
+
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
-                    className="h-9 px-2.5 sm:px-3 gap-1.5"
-                    title="Export CSV"
-                    aria-label="Export CSV"
+                    className="text-xs h-8 px-3 gap-1.5 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/30"
+                    onClick={() => sendOrderWhatsApp(activeOrder, activeItems, activeParty)}
+                  >
+                    <WhatsAppIcon className="w-3.5 h-3.5" />
+                    <span>WhatsApp</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-8 px-3 gap-1.5"
                     onClick={() => downloadCsv(`order-${activeOrder.order_no}`, activeItems)}
                   >
-                    <Download className="w-4 h-4 shrink-0" />
-                    <span className="hidden sm:inline">Export CSV</span>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>CSV</span>
                   </Button>
                   <Button
                     variant="default"
                     size="sm"
-                    className="h-9 px-3 sm:px-4 gap-1.5"
-                    title="Done"
-                    aria-label="Done"
+                    className="text-xs h-8 px-4 gap-1.5"
                     onClick={() => setViewOrderId(null)}
                   >
-                    <Check className="w-4 h-4 shrink-0" />
-                    <span className="hidden sm:inline">Done</span>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Done</span>
                   </Button>
                 </div>
               </div>
-            </>
+            </div>
           )}
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* New Order Dialog */}
       <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -1101,7 +1083,7 @@ export function Orders(){
                   <div className="form-grid">
                     <label>
                       <span className="flex items-center justify-between mb-1">
-                        <span>Box Type</span>
+                        <span>Product Type</span>
                         {d.catalog.length > 0 && (
                           <span className="text-[11px] text-muted-foreground font-normal">
                             ({d.catalog.length} configured)

@@ -72,9 +72,9 @@ export function VolumeCharts({ dispatch = false }: { dispatch?: boolean }) {
       empty: 'No company volume data yet',
     },
     {
-      title: dispatch ? 'Box Type Dispatched Share' : 'Box Type Production Share',
+      title: dispatch ? 'Product Type Dispatched Share' : 'Product Type Production Share',
       data: boxTypes,
-      empty: 'No box quantity data yet',
+      empty: 'No product quantity data yet',
     },
   ];
 

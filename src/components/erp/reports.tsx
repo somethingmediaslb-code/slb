@@ -646,7 +646,7 @@ export function Reports() {
               <tr>
                 <th>PO Number</th>
                 <th>Customer</th>
-                <th>Box Type & Dimensions</th>
+                <th>Product Type & Dimensions</th>
                 <th>Specifications</th>
                 <th className="numeric">Ordered</th>
                 <th className="numeric">Allocated</th>
@@ -801,12 +801,12 @@ export function Reports() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold mb-3">Box Type & Item-Wise Quantity Distribution</h3>
+            <h3 className="text-sm font-semibold mb-3">Product Type & Item-Wise Quantity Distribution</h3>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Box Type</th>
+                    <th>Product Type</th>
                     <th>Size Dimensions</th>
                     <th className="numeric">Total Ordered</th>
                     <th className="numeric">Total Produced</th>

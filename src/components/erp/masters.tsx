@@ -21,10 +21,10 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
     fields:[['company_name','Company Name'],['phone_number','Phone Number'],['email','Email Address'],['gstin','GSTIN Number'],['address','Factory / Billing Address']]
   },
   items:{
-    title:'Box Types',
-    entity:'box specifications',
-    add:'Add Box Type',
-    fields:[['box_type','Box Type'],['size_dimensions','Size Dimensions'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
+    title:'Product Types',
+    entity:'product specifications',
+    add:'Add Product Type',
+    fields:[['box_type','Product Type'],['size_dimensions','Size Dimensions'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
   },
   workers:{
     title:'Labour Master',
@@ -34,7 +34,7 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
   }
 };
 
-export function MasterPage({kind,title}:{kind:Kind;title?:string}){
+export function MasterPage({kind,title,department}:{kind:Kind;title?:string;department?:string}){
   const c=config[kind];
   const pageTitle=title||c.title;
   const {data,user,signIn,refresh}=useFactory();
@@ -100,7 +100,11 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
   const [page,setPage]=useState(1);
   const pageSize=10;
 
-  const rows:Record<string,unknown>[]=kind==='parties'?data.parties:kind==='items'?data.catalog:data.workers;
+  const rawWorkers = department === 'Production'
+    ? data.workers.filter(w => (w as any).department !== 'Transport' && !(w as any).vehicle_number)
+    : data.workers;
+
+  const rows:Record<string,unknown>[]=kind==='parties'?data.parties:kind==='items'?data.catalog:rawWorkers;
   const filtered=rows.filter(r=>Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase()));
 
   useEffect(()=>{
@@ -140,7 +144,7 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
     } else if(kind==='items'){
       const boxType = String(values['box_type'] ?? '').trim();
       if (!boxType) {
-        toast.error('Box type name is required.');
+        toast.error('Product type name is required.');
         setBusy(false);
         return;
       }
@@ -168,7 +172,8 @@ export function MasterPage({kind,title}:{kind:Kind;title?:string}){
         labour_name:labourName,
         phone:String(values['phone'] ?? '').trim(),
         daily_rate:Math.max(0, Number(values['daily_rate']) || 0),
-        unit_assignment:String(values['unit_assignment'] ?? '').trim()
+        unit_assignment:String(values['unit_assignment'] ?? '').trim(),
+        department: department || (editing ? (editing['department'] as string) : 'Production')
       };
       ({error}=editing?await supabase.from('labour_master').update(v).eq('id',String(editing['id'])):await supabase.from('labour_master').insert(v));
     }
