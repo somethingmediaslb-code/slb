@@ -662,9 +662,6 @@ export function Production() {
       <Dialog open={!!selected} onOpenChange={(open) => { if (!open) { setSelected(null); clearModalSearchParams(); } }}>
         <DialogContent className="modal-wide max-w-2xl" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Assign Labour to Production</DialogTitle>
-          <div className="form-subtitle">
-            Allocate workers and set completion timer for {selected?.box_type} ({selected?.size_dimensions}).
-          </div>
 
           <form onSubmit={submit}>
             {(() => {
@@ -739,8 +736,6 @@ export function Production() {
                     </div>
                   )}
 
-                  <div className="form-section-title">2. Worker Assignment & Automated Completion Schedule</div>
-
                   {exceedsPending && (
                     <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs text-destructive space-y-1 mb-4">
                       <strong className="font-semibold block">⚠️ Assigned quantity ({number(numQty)}) exceeds remaining unallocated quantity ({number(pendingPoQty)} boxes)</strong>
@@ -772,27 +767,7 @@ export function Production() {
                     </label>
 
                     <label>
-                      <div className="flex items-center justify-between">
-                        <span>Quantity to Assign (Max {number(pendingPoQty)})</span>
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            className="text-[10px] px-2 py-0.5 rounded bg-secondary hover:bg-muted font-medium text-foreground border border-border"
-                            onClick={() => setQty(pendingPoQty)}
-                          >
-                            Assign All ({number(pendingPoQty)})
-                          </button>
-                          {pendingPoQty >= 2 && (
-                            <button
-                              type="button"
-                              className="text-[10px] px-2 py-0.5 rounded bg-secondary hover:bg-muted font-medium text-foreground border border-border"
-                              onClick={() => setQty(Math.floor(pendingPoQty / 2))}
-                            >
-                              Half ({number(Math.floor(pendingPoQty / 2))})
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                      <span>Quantity to Assign (Max {number(pendingPoQty)})</span>
                       <input
                         type="number"
                         min={1}
@@ -856,9 +831,6 @@ export function Production() {
                         Completion at {new Date(new Date(start).getTime() + hours * 3600000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(new Date(start).getTime() + hours * 3600000).toLocaleDateString()}
                       </strong>
                     </div>
-                    <p className="text-muted-foreground text-[11px]">
-                      Once the {hours}-hour duration countdown completes, this batch will automatically be marked 100% completed and immediately transferred to <strong>Ready to Dispatch</strong> without requiring manual output recording.
-                    </p>
                   </div>
 
                   {/* Live Calculation Banner */}

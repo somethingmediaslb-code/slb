@@ -15,6 +15,7 @@ import appCss from "../styles.css?url";
 import { FactoryProvider } from "@/components/erp/provider";
 import { AppShell } from "@/components/erp/shell";
 import { Toaster } from "sonner";
+import { TopProgressBar, WorkspaceLoader } from "@/components/erp/page-loader";
 
 function NotFoundComponent() {
   return (
@@ -104,6 +105,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   }),
   shellComponent: RootShell,
   component: RootComponent,
+  pendingComponent: WorkspaceLoader,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
 });
@@ -135,6 +137,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <FactoryProvider>
+        <TopProgressBar />
         {isAuthPage ? (
           <Outlet />
         ) : (

@@ -172,9 +172,9 @@ export function Dispatch(){
 
   return (
     <>
-      <Heading title="Dispatch & Delivery Challan">
+      <div className="flex items-center justify-end mb-3">
         <ExportButton onClick={()=>downloadCsv('delivery-challans',filteredHistory)}/>
-      </Heading>
+      </div>
 
       <AccessNotice/>
 
@@ -222,7 +222,7 @@ export function Dispatch(){
       {tab==='ready' ? (
         <>
           <div className="desktop-table-view table-wrap">
-            <table>
+            <table className="w-full">
               <thead>
                 <tr>
                   <th className="w-8">
@@ -234,7 +234,6 @@ export function Dispatch(){
                   <th className="numeric">Produced</th>
                   <th className="numeric">Dispatched</th>
                   <th className="numeric">Ready to Dispatch</th>
-                  <th>Fulfillment</th>
                   <th className="text-right">Action</th>
                 </tr>
               </thead>
@@ -242,7 +241,6 @@ export function Dispatch(){
                 {paginatedReady.length ? paginatedReady.map(i=>{
                   const available=i.completed_qty-i.dispatched_qty-i.reserved_qty;
                   const partyName=company(i.order_id);
-                  const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
                   return (
                     <tr key={i.id} className="clickable-row" onClick={()=>setSelected(i)}>
                       <td onClick={e=>e.stopPropagation()}>
@@ -266,9 +264,6 @@ export function Dispatch(){
                       <td className="numeric text-muted-foreground">{number(i.completed_qty)}</td>
                       <td className="numeric text-muted-foreground">{number(i.dispatched_qty)}</td>
                       <td className="numeric font-medium text-foreground">{number(available)}</td>
-                      <td>
-                        <SegmentedMeter value={i.completed_qty} total={i.ordered_qty} />
-                      </td>
                       <td className="text-right" onClick={e=>e.stopPropagation()}>
                         <Button size="sm" variant="outline" onClick={()=>setSelected(i)}>
                           <FilePlus className="w-3.5 h-3.5 mr-1"/> Create Challan
@@ -277,7 +272,7 @@ export function Dispatch(){
                     </tr>
                   );
                 }) : (
-                  <Empty columns={9} label="No completed inventory awaiting dispatch"/>
+                  <Empty columns={8} label="No completed inventory awaiting dispatch"/>
                 )}
               </tbody>
               <tfoot>
@@ -297,7 +292,7 @@ export function Dispatch(){
                   <td className="numeric font-normal text-foreground px-3 py-2.5 tabular-nums">
                     {number(totalReadyQty)}
                   </td>
-                  <td colSpan={2} />
+                  <td />
                 </tr>
               </tfoot>
             </table>
@@ -308,7 +303,6 @@ export function Dispatch(){
             {paginatedReady.length ? paginatedReady.map(i => {
               const available=i.completed_qty-i.dispatched_qty-i.reserved_qty;
               const partyName=company(i.order_id);
-              const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
               const orderNo = d.orders.find(o=>o.id===i.order_id)?.order_no || '—';
               return (
                 <div key={i.id} className="mobile-record-card" onClick={()=>setSelected(i)}>
@@ -342,8 +336,8 @@ export function Dispatch(){
                       <span className="mobile-card-value">{number(i.dispatched_qty)}</span>
                     </div>
                     <div className="mobile-card-field">
-                      <span className="mobile-card-label">Fulfillment</span>
-                      <span className="mobile-card-value">{Math.round((i.completed_qty / (i.ordered_qty || 1)) * 100)}%</span>
+                      <span className="mobile-card-label">Ready</span>
+                      <span className="mobile-card-value">{number(available)}</span>
                     </div>
                   </div>
 
@@ -370,7 +364,7 @@ export function Dispatch(){
       ) : (
         <>
           <div className="desktop-table-view table-wrap">
-            <table>
+            <table className="w-full">
               <thead>
                 <tr>
                   <th className="w-8">
@@ -392,67 +386,70 @@ export function Dispatch(){
                 {paginatedHistory.length ? paginatedHistory.map(c=>{
                   const shipped=d.challanItems.filter(i=>i.challan_id===c.id).reduce((s,i)=>s+i.dispatched_qty,0);
                   const partyName=company(c.order_id);
-                  const monogram=partyName === 'Self Stocking' ? 'SS' : partyName.slice(0,2).toUpperCase();
                   return (
                     <tr key={c.id}>
                       <td onClick={e=>e.stopPropagation()}>
                         <Checkbox aria-label={`Select ${c.challan_number}`} />
                       </td>
-                      <td className="font-medium text-foreground">{c.challan_number}</td>
+                      <td className="font-medium text-foreground whitespace-nowrap">{c.challan_number}</td>
                       <td>
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-foreground">{partyName}</span>
                         </div>
                       </td>
-                      <td>{dateLabel(c.dispatch_date)}</td>
-                      <td>{c.transport_carrier||'—'}</td>
-                      <td>{c.vehicle_number||'—'}</td>
-                      <td>{c.lr_number||'—'}</td>
-                      <td className="numeric text-muted-foreground">{money(c.freight_charges||0)}</td>
-                      <td className="numeric font-medium text-foreground">{number(shipped)}</td>
-                      <td><Pill value={c.status}/></td>
-                      <td className="text-right">
+                      <td className="whitespace-nowrap">{dateLabel(c.dispatch_date)}</td>
+                      <td className="text-muted-foreground">{c.transport_carrier||'—'}</td>
+                      <td className="whitespace-nowrap text-muted-foreground">{c.vehicle_number||'—'}</td>
+                      <td className="whitespace-nowrap text-muted-foreground">{c.lr_number||'—'}</td>
+                      <td className="numeric text-muted-foreground whitespace-nowrap">{money(c.freight_charges||0)}</td>
+                      <td className="numeric font-medium text-foreground whitespace-nowrap">{number(shipped)}</td>
+                      <td className="whitespace-nowrap"><Pill value={c.status}/></td>
+                      <td className="text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1">
                           {c.status==='Delivery Challan Made' && (
                             <>
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="h-7 px-2 text-xs"
                                 onClick={()=>setConfirmDispatchChallan(c)}
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5 mr-1"/> Confirm Dispatch
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1"/> Confirm
                               </Button>
                               <Button
                                 variant="destructive"
                                 size="sm"
+                                className="h-7 px-2 text-xs"
                                 onClick={async () => {
                                   if (window.confirm(`Are you sure you want to cancel ${c.challan_number}? This will immediately release reserved completed boxes back to inventory.`)) {
                                     await action('cancel_challan', { id: c.id });
                                   }
                                 }}
                               >
-                                Cancel challan
+                                Cancel
                               </Button>
                             </>
                           )}
                           <Button
                             variant="ghost"
                             size="icon-sm"
+                            className="h-7 w-7 p-1"
                             aria-label="Print challan"
                             title="Print delivery challan"
                             onClick={()=>setPrint(c)}
                           >
-                            <Printer className="w-4 h-4"/>
+                            <Printer className="w-3.5 h-3.5"/>
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon-sm"
+                            className="h-7 w-7 p-1"
                             aria-label="Send WhatsApp alert"
                             title="Send dispatch WhatsApp alert"
                             disabled={c.status!=='Dispatched'}
                             onClick={()=>whatsapp(c)}
                           >
-                            <WhatsAppIcon className="w-4 h-4"/>
+                            <WhatsAppIcon className="w-3.5 h-3.5"/>
                           </Button>
                         </div>
                       </td>

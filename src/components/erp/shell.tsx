@@ -38,6 +38,7 @@ import {SegmentedMeter,clearModalSearchParams} from './common';
 import {money} from '@/lib/erp-data';
 import {supabase} from '@/integrations/supabase/client';
 import {PendingVerificationPage} from './pending-verification';
+import {WorkspaceLoader, PageSkeletonLoader} from './page-loader';
 
 export interface NotificationItem {
   id: string;
@@ -223,7 +224,7 @@ export function AppShell({children}:{children:ReactNode}){
   });
   const [alerts,setAlerts]=useState(false);
   const [profileOpen,setProfileOpen]=useState(false);
-  const {user,authInitialized,data,signIn,isPendingVerification,isRoleLoading,userRole,isAdmin,hasPageAccess}=useFactory();
+  const {user,authInitialized,data,signIn,isPendingVerification,isRoleLoading,userRole,isAdmin,hasPageAccess,loading}=useFactory();
 
   const toggleSidebar = () => {
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
@@ -284,12 +285,7 @@ export function AppShell({children}:{children:ReactNode}){
   }, [authInitialized, user]);
 
   if (!authInitialized || isRoleLoading) {
-    return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 bg-background text-foreground">
-        <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-        <p className="text-xs text-muted-foreground font-medium">Loading SLBW workspace…</p>
-      </div>
-    );
+    return <WorkspaceLoader message="Loading SLBW workspace…" />;
   }
 
   if (!user) {
@@ -779,8 +775,12 @@ export function AppShell({children}:{children:ReactNode}){
                 </Link>
               </div>
             </div>
+          ) : loading && (!data.orders || data.orders.length === 0) && (!data.parties || data.parties.length === 0) ? (
+            <PageSkeletonLoader />
           ) : (
-            children
+            <div key={path} className="page-transition-wrapper">
+              {children}
+            </div>
           )}
         </main>
 
