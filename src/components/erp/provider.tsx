@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useState,
+  useRef,
   type ReactNode
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -325,6 +326,41 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     }
     await cache.invalidateQueries({ queryKey: ['factory'] });
   };
+
+  // Global auto-completion engine: guarantees that any allocation whose timer expires
+  // immediately transitions to Completed and moves directly to Ready to Dispatch,
+  // regardless of which page the client is currently viewing.
+  const autoCompletingIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!user || !query.data?.allocations) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const incomplete = query.data.allocations.filter(a => a.completed_qty < a.allocated_qty);
+      for (const alloc of incomplete) {
+        const endTime = new Date(alloc.tentative_completion).getTime();
+        if (now >= endTime && !autoCompletingIds.current.has(alloc.id)) {
+          autoCompletingIds.current.add(alloc.id);
+          runFactoryAction({
+            data: {
+              action: 'complete',
+              payload: { id: alloc.id, completed_qty: alloc.allocated_qty }
+            }
+          })
+            .then(async () => {
+              await refresh();
+              toast.success(`Production complete: ${alloc.allocated_qty} boxes automatically finished and moved to Ready to Dispatch!`);
+            })
+            .catch((err) => {
+              console.error('Auto-complete error:', err);
+            })
+            .finally(() => {
+              autoCompletingIds.current.delete(alloc.id);
+            });
+        }
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [user, query.data?.allocations, cache]);
 
   const action = async (name: string, payload: Json) => {
     if (!user) {

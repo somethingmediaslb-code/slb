@@ -464,6 +464,7 @@ export type Database = {
           completed_qty: number
           created_at: string | null
           duration_hours: number
+          duration_seconds?: number | null
           id: string
           labour_id: string
           labour_rate: number
@@ -478,6 +479,7 @@ export type Database = {
           completed_qty?: number
           created_at?: string | null
           duration_hours: number
+          duration_seconds?: number | null
           id?: string
           labour_id: string
           labour_rate: number
@@ -492,6 +494,7 @@ export type Database = {
           completed_qty?: number
           created_at?: string | null
           duration_hours?: number
+          duration_seconds?: number | null
           id?: string
           labour_id?: string
           labour_rate?: number

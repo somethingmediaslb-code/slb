@@ -70,6 +70,7 @@ describe('Factory Lifecycle, Relational Integrity & Quantity Flow (10 Pillars)',
       freight_charges: 2500,
       status: 'Delivery Challan Made',
       delivery_status: 'Scheduled',
+      transporter_id: null,
       created_at: new Date().toISOString(),
     };
 

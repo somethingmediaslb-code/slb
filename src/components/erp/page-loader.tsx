@@ -58,6 +58,7 @@ export function TopProgressBar() {
       }, 350);
       return () => clearTimeout(doneTimer);
     }
+    return undefined;
   }, [pathname]);
 
   // Trigger on router pending state

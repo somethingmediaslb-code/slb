@@ -5,25 +5,31 @@ import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog, DialogContent, DialogTitle} from '@/components/ui/dialog';
 import {toast} from 'sonner';
 import {useFactory} from './provider';
-import {Heading, Empty, AccessNotice, SearchFilter, ExportButton, Pill, ViewTabs, FilterToken, TableCalcBar, Pagination, DateFilterPill, ThemedSelect, clearModalSearchParams} from './common';
-import {number, money, downloadCsv, localDateTime, type Row} from '@/lib/erp-data';
+import { Heading, Empty, AccessNotice, SearchFilter, ExportButton, Pill, ViewTabs, FilterToken, TableCalcBar, Pagination, DateFilterPill, ThemedSelect, clearModalSearchParams } from './common';
+import { DurationClockPicker } from './duration-clock-picker';
+import { number, money, downloadCsv, localDateTime, type Row } from '@/lib/erp-data';
 
 function formatRemaining(now: number, tentativeCompletion: string, startTime: string) {
   const start = new Date(startTime).getTime();
   const end = new Date(tentativeCompletion).getTime();
-  if (now >= end) return { isComplete: true, isPendingStart: false, text: 'Completed', percent: 100 };
+  if (now >= end) return { isComplete: true, isPendingStart: false, text: 'Auto-completing…', percent: 100 };
   if (now < start) {
     const waitMs = start - now;
     const mins = Math.ceil(waitMs / 60000);
     return { isComplete: false, isPendingStart: true, text: `Starts in ${mins}m`, percent: 0 };
   }
-  const diffMs = end - now;
+  const diffMs = Math.max(0, end - now);
   const totalMs = Math.max(1, end - start);
   const percent = Math.min(100, Math.max(0, Math.round(((now - start) / totalMs) * 100)));
   const hours = Math.floor(diffMs / 3600000);
   const mins = Math.floor((diffMs % 3600000) / 60000);
   const secs = Math.floor((diffMs % 60000) / 1000);
-  const text = `${hours > 0 ? `${hours}h ` : ''}${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s remaining`;
+
+  let text = '';
+  if (hours > 0) text += `${hours}h `;
+  if (hours > 0 || mins > 0) text += `${String(mins).padStart(2, '0')}m `;
+  text += `${String(secs).padStart(2, '0')}s left`;
+
   return { isComplete: false, isPendingStart: false, text, percent };
 }
 
@@ -44,7 +50,9 @@ export function Production() {
   const [selectedLabourId, setSelectedLabourId] = useState<string>('');
   const [qty, setQty] = useState<number | ''>(1);
   const [rate, setRate] = useState<number | ''>('');
-  const [hours, setHours] = useState(1);
+  const [durationHours, setDurationHours] = useState(0);
+  const [durationMinutes, setDurationMinutes] = useState(0);
+  const [durationSeconds, setDurationSeconds] = useState(30);
   const [start, setStart] = useState(localDateTime());
   const [busy, setBusy] = useState(false);
   const [nowTick, setNowTick] = useState<number>(Date.now());
@@ -137,11 +145,15 @@ export function Production() {
     setSelected(item);
     setQty(pendingQty);
     setStart(localDateTime());
-    setHours(1);
+    setDurationHours(0);
+    setDurationMinutes(0);
+    setDurationSeconds(30);
     if (d.workers.length > 0) {
       const initialWorker = d.workers[0];
-      setSelectedLabourId(initialWorker.id);
-      setRate(initialWorker.daily_rate);
+      if (initialWorker) {
+        setSelectedLabourId(initialWorker.id);
+        setRate(initialWorker.daily_rate);
+      }
     } else {
       setSelectedLabourId('');
       setRate('');
@@ -164,13 +176,19 @@ export function Production() {
     const labourId = selectedLabourId || String(f.get('labour_id'));
     const numQty = Number(qty) || 0;
     const numRate = Number(rate) || 0;
+    const effectiveSecs = Math.max(1, (durationHours * 3600) + (durationMinutes * 60) + durationSeconds);
+    const startIso = new Date(start).toISOString();
+    const tentativeCompletionIso = new Date(new Date(start).getTime() + effectiveSecs * 1000).toISOString();
+
     const ok = await action('allocate', {
       order_item_id: selected.id,
       labour_id: labourId,
       allocated_qty: numQty,
       labour_rate: numRate,
-      duration_hours: hours,
-      start_time: new Date(start).toISOString()
+      duration_hours: Math.max(1, Math.ceil(effectiveSecs / 3600)),
+      duration_seconds: effectiveSecs,
+      tentative_completion: tentativeCompletionIso,
+      start_time: startIso
     });
     setBusy(false);
     if (ok) {
@@ -249,7 +267,7 @@ export function Production() {
               <th className="numeric">Allocated</th>
               <th className="numeric">Completed</th>
               <th className="numeric">Unassigned</th>
-              <th>Progress</th>
+              <th>Timer / Status</th>
               <th>Priority</th>
               <th className="text-right">Actions</th>
             </tr>
@@ -295,15 +313,47 @@ export function Production() {
                     )}
                   </td>
                   <td>
-                    {/* Compact Pipeline Meter */}
-                    <div className="w-20 space-y-0.5" title={`Completed: ${i.completed_qty}, In Work: ${inProgress}, Pending Assign: ${unallocated}`}>
-                      <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden flex">
-                        {completedPct > 0 && <div style={{width: `${completedPct}%`}} className="h-full bg-emerald-500" />}
-                        {inProgressPct > 0 && <div style={{width: `${inProgressPct}%`}} className="h-full bg-blue-500" />}
-                        {unallocatedPct > 0 && <div style={{width: `${unallocatedPct}%`}} className="h-full bg-amber-500" />}
-                      </div>
-                      <span className="text-[10px] text-muted-foreground block">{Math.round(completedPct)}% done</span>
-                    </div>
+                    {(() => {
+                      const activeAllocs = itemAllocations.filter(a => a.completed_qty < a.allocated_qty);
+
+                      if (activeAllocs.length > 0) {
+                        const earliestActive = activeAllocs.reduce((earliest, cur) => {
+                          return new Date(cur.tentative_completion).getTime() < new Date(earliest.tentative_completion).getTime() ? cur : earliest;
+                        }, activeAllocs[0]!);
+                        const timing = formatRemaining(nowTick, earliestActive.tentative_completion, earliestActive.start_time);
+
+                        return (
+                          <div
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 shadow-xs whitespace-nowrap"
+                            title={`Batch auto-completes at ${new Date(earliestActive.tentative_completion).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
+                          >
+                            <Clock className="w-3.5 h-3.5 animate-spin text-blue-500 shrink-0" />
+                            <span>{timing.text}</span>
+                            {activeAllocs.length > 1 && (
+                              <span className="text-[10px] font-sans font-normal opacity-75">
+                                (+{activeAllocs.length - 1})
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      if (i.completed_qty >= i.ordered_qty) {
+                        return (
+                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 whitespace-nowrap">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span>Ready to Dispatch</span>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                          <Clock className="w-3 h-3 text-amber-500 shrink-0" />
+                          <span>Not Started</span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td><Pill value={i.priority_signal} /></td>
                   <td className="text-right" onClick={e => e.stopPropagation()}>
@@ -424,17 +474,42 @@ export function Production() {
                 </div>
               </div>
 
-              {/* Mobile Pipeline Bar */}
-              <div className="space-y-1 pt-1">
-                <div className="w-full h-1.5 rounded-full bg-secondary overflow-hidden flex">
-                  {completedPct > 0 && <div style={{width: `${completedPct}%`}} className="h-full bg-emerald-500" />}
-                  {inProgressPct > 0 && <div style={{width: `${inProgressPct}%`}} className="h-full bg-blue-500" />}
-                  {unallocatedPct > 0 && <div style={{width: `${unallocatedPct}%`}} className="h-full bg-amber-500" />}
-                </div>
-                <div className="flex justify-between text-[10px] text-muted-foreground">
-                  <span>{Math.round(completedPct)}% completed</span>
-                  <span className="text-amber-600 dark:text-amber-400 font-medium">{number(unallocated)} to assign</span>
-                </div>
+              {/* Mobile Timer / Status Row */}
+              <div className="pt-2 flex items-center justify-between border-t border-border/50 text-xs">
+                <span className="text-muted-foreground font-medium">Timer / Status:</span>
+                {(() => {
+                  const activeAllocs = itemAllocations.filter(a => a.completed_qty < a.allocated_qty);
+
+                  if (activeAllocs.length > 0) {
+                    const earliestActive = activeAllocs.reduce((earliest, cur) => {
+                      return new Date(cur.tentative_completion).getTime() < new Date(earliest.tentative_completion).getTime() ? cur : earliest;
+                    }, activeAllocs[0]!);
+                    const timing = formatRemaining(nowTick, earliestActive.tentative_completion, earliestActive.start_time);
+
+                    return (
+                      <span className="inline-flex items-center gap-1 font-mono font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2.5 py-0.5 rounded-full border border-blue-500/25">
+                        <Clock className="w-3 h-3 animate-spin text-blue-500" />
+                        <span>{timing.text}</span>
+                      </span>
+                    );
+                  }
+
+                  if (i.completed_qty >= i.ordered_qty) {
+                    return (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <span>Ready to Dispatch</span>
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                      <Clock className="w-3 h-3 text-amber-500" />
+                      <span>Not Started</span>
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Mobile Actions Bar */}
@@ -795,7 +870,7 @@ export function Production() {
                       />
                     </label>
 
-                    <label>
+                    <label className="sm:col-span-2">
                       Scheduled Start Time
                       <input
                         type="datetime-local"
@@ -805,32 +880,21 @@ export function Production() {
                         className="mt-1"
                       />
                     </label>
-
-                    <label>
-                      Estimated Duration (1 to 10 Hours)
-                      <ThemedSelect
-                        name="duration_hours"
-                        value={String(hours)}
-                        onChange={v => setHours(Number(v))}
-                        options={Array.from({length: 10}, (_, idx) => ({
-                          value: String(idx + 1),
-                          label: `${idx + 1} hour${idx > 0 ? 's' : ''}`
-                        }))}
-                      />
-                    </label>
                   </div>
 
-                  {/* Automated Completion & Timing Info */}
-                  <div className="p-3 bg-secondary/40 border border-border rounded-xl text-xs space-y-1.5 my-3">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-primary" />
-                        Automated Completion & Dispatch Flow
-                      </span>
-                      <strong className="text-foreground font-medium">
-                        Completion at {new Date(new Date(start).getTime() + hours * 3600000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}, {new Date(new Date(start).getTime() + hours * 3600000).toLocaleDateString()}
-                      </strong>
-                    </div>
+                  {/* Clock UI for Hours, Minutes & Seconds */}
+                  <div className="my-3">
+                    <DurationClockPicker
+                      hours={durationHours}
+                      minutes={durationMinutes}
+                      seconds={durationSeconds}
+                      onChange={(h, m, s) => {
+                        setDurationHours(h);
+                        setDurationMinutes(m);
+                        setDurationSeconds(s);
+                      }}
+                      startTime={start}
+                    />
                   </div>
 
                   {/* Live Calculation Banner */}

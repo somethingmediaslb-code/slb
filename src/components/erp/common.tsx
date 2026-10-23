@@ -255,6 +255,7 @@ export function FilterToken({
 export interface ThemedSelectOption {
   value: string;
   label: string;
+  disabled?: boolean;
 }
 
 export function ThemedSelect({
@@ -309,7 +310,7 @@ export function ThemedSelect({
         </SelectTrigger>
         <SelectContent align="start">
           {normalizedOptions.map(opt => (
-            <SelectItem key={opt.value} value={opt.value}>
+            <SelectItem key={opt.value} value={opt.value} disabled={opt.disabled}>
               {opt.label}
             </SelectItem>
           ))}
@@ -374,7 +375,7 @@ export function ThemedCalendar({
   value: string;
   onChange: (val: string) => void;
   onClose: () => void;
-  minDate?: string;
+  minDate?: string | undefined;
 }) {
   const today = new Date();
   const currentTodayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
