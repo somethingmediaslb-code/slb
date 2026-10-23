@@ -368,3 +368,225 @@ export const adminRevokeRole = createServerFn({method: 'POST'})
       throw new Error(err instanceof Error ? err.message : 'Could not revoke role');
     }
   });
+
+export const adminDeleteOrder = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { orderId: string; force?: boolean }) => input)
+  .handler(async ({ data, context }) => {
+    try {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+      // Verify caller is admin
+      const { data: callerRole } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', context.userId)
+        .maybeSingle();
+
+      if (callerRole?.role !== 'admin') {
+        throw new Error('Only administrators can delete orders');
+      }
+
+      const { data: ord } = await supabaseAdmin
+        .from('orders')
+        .select('id, order_no, status')
+        .eq('id', data.orderId)
+        .maybeSingle();
+
+      if (!ord) {
+        throw new Error('Order not found');
+      }
+
+      // Check for dispatched challans
+      const { data: dispatchedChallans } = await supabaseAdmin
+        .from('delivery_challans')
+        .select('id, challan_number')
+        .eq('order_id', data.orderId)
+        .eq('status', 'Dispatched');
+
+      if (dispatchedChallans && dispatchedChallans.length > 0) {
+        throw new Error(
+          `Cannot delete order ${ord.order_no}: ${dispatchedChallans.length} delivery challan(s) have already been dispatched. Close the order short instead.`
+        );
+      }
+
+      // Check for logged allocations if not force
+      if (!data.force) {
+        const { data: orderItems } = await supabaseAdmin
+          .from('order_items')
+          .select('id')
+          .eq('order_id', data.orderId);
+
+        const itemIds = (orderItems ?? []).map(i => i.id);
+        if (itemIds.length > 0) {
+          const { data: loggedAllocations } = await supabaseAdmin
+            .from('production_allocations')
+            .select('id, completed_qty')
+            .in('order_item_id', itemIds)
+            .gt('completed_qty', 0);
+
+          if (loggedAllocations && loggedAllocations.length > 0) {
+            throw new Error(
+              `Cannot delete order ${ord.order_no}: manufacturing work has already been logged. Please close the order short.`
+            );
+          }
+        }
+      }
+
+      // Clean up draft challans and items
+      const { data: challans } = await supabaseAdmin
+        .from('delivery_challans')
+        .select('id')
+        .eq('order_id', data.orderId);
+
+      const challanIds = (challans ?? []).map(c => c.id);
+      if (challanIds.length > 0) {
+        await supabaseAdmin.from('challan_items').delete().in('challan_id', challanIds);
+        await supabaseAdmin.from('delivery_challans').delete().eq('order_id', data.orderId);
+      }
+
+      // Clean up allocations
+      const { data: items } = await supabaseAdmin
+        .from('order_items')
+        .select('id')
+        .eq('order_id', data.orderId);
+
+      const itemIds = (items ?? []).map(i => i.id);
+      if (itemIds.length > 0) {
+        await supabaseAdmin.from('production_allocations').delete().in('order_item_id', itemIds);
+      }
+
+      // Delete order items
+      await supabaseAdmin.from('order_items').delete().eq('order_id', data.orderId);
+
+      // Delete order
+      const { error: delErr } = await supabaseAdmin.from('orders').delete().eq('id', data.orderId);
+      if (delErr) throw delErr;
+
+      // Realtime ping
+      try {
+        await (supabaseAdmin.from as any)('factory_data_pings').insert({
+          table_name: 'orders',
+          change_source: `order_deleted:${data.orderId}`
+        });
+      } catch {}
+
+      return { success: true, orderNo: ord.order_no };
+    } catch (err: unknown) {
+      console.error('adminDeleteOrder error:', err);
+      throw new Error(err instanceof Error ? err.message : 'Could not delete order');
+    }
+  });
+
+export const adminUpdateOrder = createServerFn({ method: 'POST' })
+  .middleware([requireSupabaseAuth])
+  .validator((input: {
+    orderId: string;
+    partyId?: string | null;
+    isSelfStock?: boolean;
+    orderDate?: string;
+    expectedDate?: string;
+    medium?: string;
+    remarks?: string;
+    items?: Array<{
+      id?: string;
+      box_type: string;
+      code_remarks?: string;
+      size_dimensions: string;
+      specification?: string;
+      ordered_qty: number;
+      unit_rate: number;
+      priority_signal?: string;
+    }>;
+  }) => input)
+  .handler(async ({ data, context }) => {
+    try {
+      const { supabaseAdmin } = await import('@/integrations/supabase/client.server');
+
+      // Verify caller is admin or manager
+      const { data: callerRole } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', context.userId)
+        .maybeSingle();
+
+      if (callerRole?.role !== 'admin' && callerRole?.role !== 'manager') {
+        throw new Error('Only administrators and managers can edit orders');
+      }
+
+      const { data: existingOrder } = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('id', data.orderId)
+        .maybeSingle();
+
+      if (!existingOrder) {
+        throw new Error('Order not found');
+      }
+
+      // Update orders table
+      const orderUpdate: Record<string, unknown> = {};
+      if (data.partyId !== undefined) orderUpdate['party_id'] = data.isSelfStock ? null : data.partyId;
+      if (data.isSelfStock !== undefined) orderUpdate['is_self_stock'] = data.isSelfStock;
+      if (data.orderDate) orderUpdate['order_date'] = data.orderDate;
+      if (data.expectedDate) orderUpdate['expected_date'] = data.expectedDate;
+      if (data.medium) orderUpdate['medium'] = data.medium;
+      if (data.remarks !== undefined) orderUpdate['remarks'] = data.remarks;
+
+      if (Object.keys(orderUpdate).length > 0) {
+        const { error: ordErr } = await (supabaseAdmin.from as any)('orders')
+          .update(orderUpdate)
+          .eq('id', data.orderId);
+        if (ordErr) throw ordErr;
+      }
+
+      // Update or insert items if provided
+      if (data.items && data.items.length > 0) {
+        for (let i = 0; i < data.items.length; i++) {
+          const item = data.items[i];
+          if (!item) continue;
+          if (item.id) {
+            await (supabaseAdmin.from as any)('order_items')
+              .update({
+                sr_no: i + 1,
+                box_type: item.box_type,
+                code_remarks: item.code_remarks ?? '',
+                size_dimensions: item.size_dimensions,
+                specification: item.specification ?? '',
+                ordered_qty: item.ordered_qty,
+                unit_rate: item.unit_rate,
+                priority_signal: item.priority_signal ?? 'Yellow'
+              })
+              .eq('id', item.id);
+          } else {
+            await (supabaseAdmin.from as any)('order_items')
+              .insert({
+                order_id: data.orderId,
+                sr_no: i + 1,
+                box_type: item.box_type,
+                code_remarks: item.code_remarks ?? '',
+                size_dimensions: item.size_dimensions,
+                specification: item.specification ?? '',
+                ordered_qty: item.ordered_qty,
+                unit_rate: item.unit_rate,
+                priority_signal: item.priority_signal ?? 'Yellow'
+              });
+          }
+        }
+      }
+
+      // Realtime ping
+      try {
+        await (supabaseAdmin.from as any)('factory_data_pings').insert({
+          table_name: 'orders',
+          change_source: `order_updated:${data.orderId}`
+        });
+      } catch {}
+
+      return { success: true, orderId: data.orderId };
+    } catch (err: unknown) {
+      console.error('adminUpdateOrder error:', err);
+      throw new Error(err instanceof Error ? err.message : 'Could not update order');
+    }
+  });
+

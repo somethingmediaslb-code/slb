@@ -1,6 +1,6 @@
 import {useState, useEffect, useRef} from 'react';
 import {useSearch, useNavigate} from '@tanstack/react-router';
-import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search,Download,Check,Ban,Copy} from 'lucide-react';
+import {Plus,Trash2,Building2,Calendar,Package,CheckCircle2,Clock,Layers,MoreHorizontal,Phone,Mail,ClipboardList,List,LayoutGrid,Share2,ChevronDown,Search,Download,Check,Ban,Copy,Pencil} from 'lucide-react';
 import {toast} from 'sonner';
 import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
@@ -235,15 +235,12 @@ function sendOrderWhatsApp(order: Row<'orders'>, items: Row<'order_items'>[], pa
 }
 
 export function Orders(){
-  const {data:d,user,signIn,action,isAdmin}=useFactory();
+  const {data:d,user,signIn,action,isAdmin,refresh}=useFactory();
   const navigate=useNavigate();
   const searchParams=useSearch({strict:false}) as {new?:boolean; view?:string};
   const [open,setOpen]=useState(false);
-  const [viewMode,setViewMode]=useState<'list'|'board'>('list');
   const [search,setSearch]=useState('');
-  const [statusTab,setStatusTab]=useState('All');
   const [partyFilter,setPartyFilter]=useState('All');
-  const [mediumFilter,setMediumFilter]=useState('All');
   const [page,setPage]=useState(1);
   const pageSize=10;
   const [stock,setStock]=useState(false);
@@ -254,6 +251,28 @@ export function Orders(){
   const [closeShortOrderId,setCloseShortOrderId]=useState<string|null>(null);
   const [closeShortReason,setCloseShortReason]=useState('');
   const [closeShortBusy,setCloseShortBusy]=useState(false);
+
+  // Edit Order state
+  const [editOrder, setEditOrder] = useState<Row<'orders'> | null>(null);
+  const [editLines, setEditLines] = useState<Array<{
+    id?: string;
+    sr_no: number;
+    box_type: string;
+    code_remarks: string;
+    size_dimensions: string;
+    specification: string;
+    ordered_qty: number;
+    unit_rate: number;
+    priority_signal: string;
+  }>>([]);
+  const [editOrderDate, setEditOrderDate] = useState('');
+  const [editExpectedDate, setEditExpectedDate] = useState('');
+  const [editStock, setEditStock] = useState(false);
+  const [editPartyId, setEditPartyId] = useState<string | null>(null);
+  const [editMedium, setEditMedium] = useState('Other');
+  const [editRemarks, setEditRemarks] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(()=>{
     if(searchParams.new&&user){
@@ -291,40 +310,127 @@ export function Orders(){
   const company = (id: string | null, isStock?: boolean) =>
     isStock ? 'Self Stocking' : (d.parties.find(p => p.id === id)?.company_name ?? '—');
 
-  // Base filtered by active search, party, and channel/medium filters
+  // Base filtered by active search and party filters
   const baseFiltered = d.orders.filter(o => {
     const matchesParty = partyFilter === 'All' || (o.is_self_stock && partyFilter === 'self') || o.party_id === partyFilter;
-    const matchesMedium = mediumFilter === 'All' || o.medium === mediumFilter;
     const compName = company(o.party_id, o.is_self_stock);
-    const orderItems = d.items.filter(i => i.order_id === o.id);
-    const itemDetails = orderItems.map(i => `${i.box_type} ${i.specification ?? ''}`).join(' ');
-    const matchesSearch = (o.order_no + ' ' + compName + ' ' + itemDetails + ' ' + (o.remarks ?? '')).toLowerCase().includes(search.toLowerCase());
-    return matchesParty && matchesMedium && matchesSearch;
+    const matchesSearch = compName.toLowerCase().includes(search.toLowerCase()) || o.order_no.toLowerCase().includes(search.toLowerCase());
+    return matchesParty && matchesSearch;
   });
 
-  // Dynamic status counts for ViewTabs based on active filter criteria
-  const pendingCount = baseFiltered.filter(o => o.status === 'Pending').length;
-  const prodCount = baseFiltered.filter(o => o.status === 'In Production').length;
-  const partDispCount = baseFiltered.filter(o => o.status === 'Partially Dispatched').length;
-  const dispCount = baseFiltered.filter(o => o.status === 'Dispatched').length;
-  const doneCount = baseFiltered.filter(o => o.status === 'Completed').length;
-
-  const tabs = [
-    { id: 'All', label: 'All Orders', count: baseFiltered.length },
-    { id: 'Pending', label: 'Pending', count: pendingCount },
-    { id: 'In Production', label: 'In Production', count: prodCount },
-    { id: 'Partially Dispatched', label: 'Partially Dispatched', count: partDispCount },
-    { id: 'Dispatched', label: 'Dispatched', count: dispCount },
-    { id: 'Completed', label: 'Completed', count: doneCount },
-  ];
-
-  const filtered = baseFiltered.filter(o => statusTab === 'All' || o.status === statusTab);
+  const filtered = baseFiltered;
 
   useEffect(() => {
     setPage(1);
-  }, [search, statusTab, partyFilter, mediumFilter]);
+  }, [search, partyFilter]);
 
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+  function startEditOrder(order: Row<'orders'>) {
+    const items = d.items.filter(i => i.order_id === order.id);
+    setEditOrder(order);
+    setEditStock(order.is_self_stock);
+    setEditPartyId(order.party_id);
+    setEditOrderDate(order.order_date);
+    setEditExpectedDate(order.expected_date);
+    setEditMedium(order.medium || 'Other');
+    setEditRemarks(order.remarks || '');
+    setEditLines(
+      items.length
+        ? items.map(i => ({
+            id: i.id,
+            sr_no: i.sr_no,
+            box_type: i.box_type,
+            code_remarks: i.code_remarks || '',
+            size_dimensions: i.size_dimensions,
+            specification: i.specification || '',
+            ordered_qty: i.ordered_qty,
+            unit_rate: i.unit_rate,
+            priority_signal: i.priority_signal
+          }))
+        : [freshLine(1)]
+    );
+  }
+
+  async function submitEdit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editOrder) return;
+    if (!editStock && (!editPartyId || editPartyId.trim() === '')) {
+      toast.error('Company selection is compulsory. Please select a party.');
+      return;
+    }
+    if (!editLines.length) {
+      toast.error('At least one item is required in the order.');
+      return;
+    }
+    for (let i = 0; i < editLines.length; i++) {
+      const l = editLines[i];
+      if (!l) continue;
+      if (!l.box_type.trim()) {
+        toast.error(`Item #${i + 1}: Please select or enter a product type.`);
+        return;
+      }
+      if (!l.size_dimensions || !l.size_dimensions.trim()) {
+        toast.error(`Item #${i + 1}: Please specify dimensions.`);
+        return;
+      }
+      if (Number(l.ordered_qty) <= 0) {
+        toast.error(`Item #${i + 1}: Quantity must be at least 1.`);
+        return;
+      }
+    }
+
+    setEditBusy(true);
+    try {
+      const { adminUpdateOrder } = await import('@/lib/admin.functions');
+      await adminUpdateOrder({
+        data: {
+          orderId: editOrder.id,
+          partyId: editStock ? null : editPartyId,
+          isSelfStock: editStock,
+          orderDate: editOrderDate,
+          expectedDate: editExpectedDate,
+          medium: editMedium,
+          remarks: editRemarks,
+          items: editLines.map((l) => ({
+            ...(l.id ? { id: l.id } : {}),
+            box_type: l.box_type,
+            code_remarks: l.code_remarks,
+            size_dimensions: l.size_dimensions,
+            specification: l.specification,
+            ordered_qty: Number(l.ordered_qty),
+            unit_rate: Number(l.unit_rate) || 0,
+            priority_signal: l.priority_signal || 'Yellow'
+          }))
+        }
+      });
+      toast.success('Order updated successfully');
+      setEditOrder(null);
+      await refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Could not update order');
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
+  async function handleDeleteOrder(orderId: string, orderNo: string) {
+    if (!window.confirm(`Are you sure you want to permanently delete order "${orderNo}"? This action cannot be undone.`)) {
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      const { adminDeleteOrder } = await import('@/lib/admin.functions');
+      await adminDeleteOrder({ data: { orderId } });
+      toast.success(`Order ${orderNo} deleted successfully`);
+      setViewOrderId(null);
+      await refresh();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Could not delete order');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   // Calculate live totals for footer dock
   const totalVolume=filtered.reduce((sum,o)=>{
@@ -417,12 +523,9 @@ export function Orders(){
 
       <AccessNotice/>
 
-      {/* View Tabs */}
-      <ViewTabs tabs={tabs} active={statusTab} onChange={setStatusTab}/>
-
-      {/* Filter Tokens Toolbar with View Mode Switcher */}
+      {/* Filter Toolbar */}
       <div className="filters">
-        <SearchFilter value={search} onChange={setSearch} placeholder="Search order number or client…"/>
+        <SearchFilter value={search} onChange={setSearch} placeholder="Search customer / client name…"/>
 
         <FilterToken
           label="Client"
@@ -434,288 +537,115 @@ export function Orders(){
             ...d.parties.map(p=>({value:p.id,label:p.company_name}))
           ]}
         />
-
-        <FilterToken
-          label="Channel"
-          value={mediumFilter}
-          onChange={setMediumFilter}
-          options={[
-            {value:'All',label:'All channels'},
-            {value:'WhatsApp',label:'WhatsApp'},
-            {value:'Call',label:'Phone Call'},
-            {value:'Mail',label:'Email'},
-            {value:'Other',label:'Direct / Other'},
-          ]}
-        />
-
-        <div className="ml-auto flex items-center">
-          <SegmentedControl
-            value={viewMode}
-            onChange={val => setViewMode(val as 'list' | 'board')}
-            options={[
-              { value: 'list', label: 'Table', icon: List },
-              { value: 'board', label: 'Board', icon: LayoutGrid },
-            ]}
-          />
-        </div>
       </div>
 
-      {viewMode === 'board' ? (
-        /* Orders Board (Kanban Columns) */
-        <div className="deals-board">
-          {(['Pending', 'In Production', 'Partially Dispatched', 'Dispatched', 'Completed'] as const).map(stage => {
-            const stageOrders = filtered.filter(o => o.status === stage);
-            const stageValue = stageOrders.reduce((sum, o) => {
-              const items = d.items.filter(i => i.order_id === o.id);
-              return sum + items.reduce((s, i) => s + (i.total_price ?? 0), 0);
-            }, 0);
-
-            return (
-              <div key={stage} className="deals-column">
-                <div className="deals-column-header">
-                  <div className="deals-column-title">
-                    <span className={cn('pill', `pill-${stage.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`)} data-status={stage} />
-                    <span>{stage}</span>
-                    <span className="deals-column-count">{stageOrders.length}</span>
-                  </div>
-                  <div className="deals-column-total">{money(stageValue)}</div>
-                </div>
-
-                <div className="deals-column-cards">
-                  {stageOrders.length ? (
-                    stageOrders.map(o => {
-                      const items = d.items.filter(i => i.order_id === o.id);
-                      const ordered = items.reduce((s, i) => s + i.ordered_qty, 0);
-                      const completed = items.reduce((s, i) => s + i.completed_qty, 0);
-                      const value = items.reduce((s, i) => s + (i.total_price ?? 0), 0);
-                      const firstItem = items[0];
-
-                      return (
-                        <div
-                          key={o.id}
-                          className="deals-card"
-                          onClick={() => setViewOrderId(o.id)}
-                          title="Click to inspect order"
-                        >
-                          <div className="deals-card-top">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="min-w-0">
-                                <div className="deals-card-title truncate">
-                                  {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
-                                </div>
-                              </div>
-                            </div>
-                            <Pill value={o.status} />
-                          </div>
-
-                          <div className="text-xs font-medium text-foreground py-0.5">
-                            {firstItem?.box_type || 'Standard Box'}
-                            {items.length > 1 && (
-                              <span className="text-[11px] font-normal text-muted-foreground ml-1.5">
-                                (+{items.length - 1})
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="deals-card-metric">
-                            <span className="text-muted-foreground font-medium">{number(ordered)} boxes</span>
-                          </div>
-
-                          <div className="deals-card-footer">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3 text-muted-foreground" />
-                              <span>{dateLabel(o.expected_date)}</span>
-                            </span>
-                            <MiniSparkline />
-                          </div>
-                        </div>
-                      );
-                    })
-                  ) : (
-                    <div className="text-center py-12 text-xs text-muted-foreground bg-secondary/30 rounded-lg border border-dashed border-border">
-                      No orders in this stage
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <>
-          {/* Main Desktop Table */}
-          <div className="desktop-table-view table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="w-8">
-                    <Checkbox aria-label="Select all" />
-                  </th>
-                  <th>Customer Name</th>
-                  <th>Product Type</th>
-                  <th className="numeric">QTY of Boxes</th>
-                  <th>Due Date</th>
-                  <th>Status</th>
-                  <th className="w-20 text-right"><span className="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length ? paginated.map(o=>{
-                  const items=d.items.filter(i=>i.order_id===o.id);
-                  const ordered=items.reduce((s,i)=>s+i.ordered_qty,0);
-                  const firstItem=items[0];
-                  return (
-                    <tr
-                      key={o.id}
-                      className="clickable-row"
-                      onClick={()=>setViewOrderId(o.id)}
-                      title="Click to view full details"
-                    >
-                      <td onClick={e=>e.stopPropagation()}>
-                        <Checkbox aria-label={`Select ${o.order_no}`} />
-                      </td>
-                      <td>
-                        <span className="font-semibold text-foreground">{o.is_self_stock ? 'Self Stocking' : company(o.party_id)}</span>
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
-                          <span className="font-medium text-foreground">{firstItem?.box_type || 'Standard Box'}</span>
-                          {items.length > 1 && (
-                            <span className="text-[11px] font-normal text-muted-foreground bg-secondary/80 px-1.5 py-0.5 rounded border border-border/60">
-                              +{items.length - 1} more
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="numeric font-medium text-foreground">{number(ordered)}</td>
-                      <td className="text-xs text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-muted-foreground/70" />
-                          <span>{dateLabel(o.expected_date)}</span>
-                        </div>
-                      </td>
-                      <td><Pill value={o.status}/></td>
-                      <td className="text-right" onClick={e=>e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Send Order Details to WhatsApp"
-                            title="Send Order Details to WhatsApp"
-                            onClick={()=>sendOrderWhatsApp(o,items,d.parties.find(p=>p.id===o.party_id))}
-                          >
-                            <WhatsAppIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400"/>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="View order options"
-                            title="View order options"
-                            onClick={()=>setViewOrderId(o.id)}
-                          >
-                            <MoreHorizontal className="w-4 h-4"/>
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                }) : (
-                  <Empty columns={7} label="No matching orders found"/>
-                )}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-border bg-muted/20 font-medium">
-                  <td colSpan={3} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
-                    Totals ({number(filtered.length)} orders):
-                  </td>
-                  <td className="numeric font-semibold text-foreground px-3 py-2.5 tabular-nums">
-                    {number(totalVolume)}
-                  </td>
-                  <td colSpan={3} />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* Mobile Phone Card View (No Horizontal Sliding Required) */}
-          <div className="mobile-card-view">
-            {paginated.length ? paginated.map(o => {
-              const items = d.items.filter(i => i.order_id === o.id);
-              const ordered = items.reduce((s, i) => s + i.ordered_qty, 0);
-              const firstItem = items[0];
+      {/* Main Desktop Table - Only Customer Name Visible */}
+      <div className="desktop-table-view table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th className="w-12 text-center text-xs text-muted-foreground font-medium">#</th>
+              <th>Customer Name</th>
+              <th className="w-36 text-right"><span className="sr-only">Details</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {paginated.length ? paginated.map((o, idx) => {
+              const customerName = o.is_self_stock ? 'Self Stocking' : company(o.party_id);
               return (
-                <div
+                <tr
                   key={o.id}
-                  className="mobile-record-card"
+                  className="clickable-row hover:bg-muted/40 transition-colors"
                   onClick={() => setViewOrderId(o.id)}
+                  title={`Click to view details for ${customerName}`}
                 >
-                  <div className="mobile-card-top">
-                    <div className="mobile-card-title-group">
-                      <div className="mobile-card-title">
-                        {o.is_self_stock ? 'Self Stocking' : company(o.party_id)}
+                  <td className="w-12 text-center text-xs text-muted-foreground font-mono">
+                    {(page - 1) * pageSize + idx + 1}
+                  </td>
+                  <td className="py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-semibold text-xs shrink-0">
+                        <Building2 className="w-4 h-4" />
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 font-medium">
-                        {firstItem?.box_type || 'Standard Box'}
-                        {items.length > 1 && ` (+${items.length - 1} more)`}
-                      </div>
+                      <span className="font-semibold text-foreground text-sm sm:text-base">
+                        {customerName}
+                      </span>
                     </div>
-                    <Pill value={o.status} />
-                  </div>
-
-                  <div className="mobile-card-grid">
-                    <div className="mobile-card-field">
-                      <span className="mobile-card-label">QTY of Boxes</span>
-                      <span className="mobile-card-value font-medium">{number(ordered)}</span>
-                    </div>
-                    <div className="mobile-card-field">
-                      <span className="mobile-card-label">Due Date</span>
-                      <span className="mobile-card-value">{dateLabel(o.expected_date)}</span>
-                    </div>
-                  </div>
-
-                  <div className="mobile-card-actions justify-end gap-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs px-2.5 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-500/10 gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        sendOrderWhatsApp(o, items, d.parties.find(p => p.id === o.party_id));
-                      }}
-                    >
-                      <WhatsAppIcon className="w-3.5 h-3.5" />
-                      <span>WhatsApp</span>
-                    </Button>
+                  </td>
+                  <td className="text-right py-3.5 pr-4" onClick={e => e.stopPropagation()}>
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="h-7 text-xs px-2.5 gap-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setViewOrderId(o.id);
-                      }}
+                      className="h-8 text-xs font-medium px-3 gap-1.5 hover:bg-secondary/80"
+                      onClick={() => setViewOrderId(o.id)}
                     >
-                      <MoreHorizontal className="w-3.5 h-3.5" />
-                      <span>Details</span>
+                      <span>View Details</span>
+                      <MoreHorizontal className="w-3.5 h-3.5 text-muted-foreground" />
                     </Button>
-                  </div>
-                </div>
+                  </td>
+                </tr>
               );
             }) : (
-              <div className="p-8 text-center text-sm text-muted-foreground bg-card border border-border rounded-xl">
-                No matching orders found
-              </div>
+              <Empty columns={3} label="No matching orders found" />
             )}
-          </div>
+          </tbody>
+          <tfoot>
+            <tr className="border-t border-border bg-muted/20 font-medium">
+              <td colSpan={3} className="text-xs text-muted-foreground font-medium px-4 py-2.5">
+                Showing {number(filtered.length)} customer order{filtered.length === 1 ? '' : 's'}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
-          <Pagination
-            currentPage={page}
-            totalItems={filtered.length}
-            pageSize={pageSize}
-            onPageChange={setPage}
-          />
-        </>
-      )}
+      {/* Mobile Card View - Only Customer Name Visible */}
+      <div className="mobile-card-view">
+        {paginated.length ? paginated.map(o => {
+          const customerName = o.is_self_stock ? 'Self Stocking' : company(o.party_id);
+          return (
+            <div
+              key={o.id}
+              className="mobile-record-card p-4 hover:border-primary/40 transition-colors cursor-pointer"
+              onClick={() => setViewOrderId(o.id)}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Building2 className="w-4 h-4" />
+                  </div>
+                  <div className="font-semibold text-foreground text-sm truncate">
+                    {customerName}
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 text-xs px-2.5 gap-1 shrink-0"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setViewOrderId(o.id);
+                  }}
+                >
+                  <span>Details</span>
+                  <MoreHorizontal className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="p-8 text-center text-sm text-muted-foreground bg-card border border-border rounded-xl">
+            No matching orders found
+          </div>
+        )}
+      </div>
+
+      <Pagination
+        currentPage={page}
+        totalItems={filtered.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+      />
 
 
       {/* Super Clean Order Information & Inspection Dialog */}
@@ -943,13 +873,36 @@ export function Orders(){
               </div>
 
               {/* 5. Clean Dialog Footer Actions */}
-              <div className="pt-3 border-t border-border flex items-center justify-between gap-3">
-                <div>
+              <div className="pt-3 border-t border-border flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {isAdmin && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-8 px-3 gap-1.5 hover:bg-secondary"
+                        onClick={() => startEditOrder(activeOrder)}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-primary" />
+                        <span>Edit Order</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={deleteBusy}
+                        className="border-destructive/40 text-destructive hover:bg-destructive/10 text-xs h-8 px-3 gap-1.5"
+                        onClick={() => handleDeleteOrder(activeOrder.id, activeOrder.order_no)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>{deleteBusy ? 'Deleting…' : 'Delete Order'}</span>
+                      </Button>
+                    </>
+                  )}
                   {isAdmin && activeOrder.status !== 'Completed' && activeOrder.status !== 'Cancelled' && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="border-destructive/50 text-destructive hover:bg-destructive/10 text-xs h-8 px-2.5 gap-1.5"
+                      className="border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 text-xs h-8 px-2.5 gap-1.5"
                       onClick={() => {
                         setCloseShortOrderId(activeOrder.id);
                         setCloseShortReason('');
@@ -995,6 +948,204 @@ export function Orders(){
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Edit Order Dialog (Admin only) */}
+      <Dialog open={!!editOrder} onOpenChange={(o) => { if (!o) setEditOrder(null); }}>
+        <DialogContent className="modal-wide" aria-describedby={undefined}>
+          <DialogTitle className="text-xl font-medium">
+            Edit Order: {editOrder?.order_no}
+          </DialogTitle>
+          <div className="form-subtitle">
+            Update order customer, target dates, or modify box line items.
+          </div>
+
+          {editOrder && (
+            <form onSubmit={submitEdit}>
+              <label className="toggle-check mb-5 flex items-center gap-2.5 cursor-pointer text-sm font-medium">
+                <Checkbox checked={editStock} onCheckedChange={checked => setEditStock(Boolean(checked))} />
+                <span>Self-stocking run (internal factory inventory)</span>
+              </label>
+
+              {/* Section 1: Metadata */}
+              <div className="form-section-title">1. Order Information</div>
+              <div className="form-grid">
+                <label className="form-wide">
+                  Client / Company
+                  <ThemedSelect
+                    aria-label="Company"
+                    name="party_id"
+                    value={editStock ? '' : (editPartyId || '')}
+                    onChange={(val) => setEditPartyId(val)}
+                    required={!editStock}
+                    disabled={editStock}
+                    placeholder={editStock ? 'Self Stocking' : 'Select company'}
+                    options={d.parties.map(p => ({ value: p.id, label: p.company_name }))}
+                  />
+                </label>
+                <label>
+                  Order Date
+                  <ThemedDatePicker
+                    aria-label="Order Date"
+                    name="order_date"
+                    value={editOrderDate}
+                    onChange={setEditOrderDate}
+                    required
+                  />
+                </label>
+                <label>
+                  Target Delivery Date
+                  <ThemedDatePicker
+                    aria-label="Target Delivery Date"
+                    name="expected_date"
+                    value={editExpectedDate}
+                    onChange={setEditExpectedDate}
+                    minDate={editOrderDate || today()}
+                    required
+                  />
+                </label>
+                <label>
+                  Intake Medium
+                  <ThemedSelect
+                    aria-label="Order medium"
+                    name="medium"
+                    value={editMedium}
+                    onChange={setEditMedium}
+                    options={['WhatsApp', 'Call', 'Mail', 'Other']}
+                  />
+                </label>
+                <label>
+                  General Remarks / Delivery Instructions
+                  <input
+                    name="remarks"
+                    value={editRemarks}
+                    onChange={e => setEditRemarks(e.target.value)}
+                    placeholder="e.g. Deliver before 4 PM, pallet packaging"
+                  />
+                </label>
+              </div>
+
+              {/* Section 2: Items */}
+              <div className="form-section-title mt-6">2. Box Specifications & Quantities</div>
+              <div className="space-y-4">
+                {editLines.map((l, index) => (
+                  <div key={index} className="order-line">
+                    <div className="order-line-head">
+                      <h3 className="text-sm font-medium">Item #{index + 1}</h3>
+                      {editLines.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Remove item"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => setEditLines(editLines.filter((_, i) => i !== index))}
+                        >
+                          <Trash2 className="w-4 h-4 mr-1" /> Remove
+                        </Button>
+                      )}
+                    </div>
+                    <div className="form-grid">
+                      <label>
+                        <span className="flex items-center justify-between mb-1">
+                          <span>Product Type</span>
+                          {d.catalog.length > 0 && (
+                            <span className="text-[11px] text-muted-foreground font-normal">
+                              ({d.catalog.length} configured)
+                            </span>
+                          )}
+                        </span>
+                        <BoxTypePicker
+                          required
+                          value={l.box_type}
+                          catalog={d.catalog}
+                          onChange={val => {
+                            const catalog = d.catalog.find(i => i.box_type.toLowerCase() === val.toLowerCase()) || d.catalog.find(i => i.box_type === val);
+                            setEditLines(editLines.map((x, i) => i === index ? {
+                              ...x,
+                              box_type: val,
+                              ...(catalog ? {
+                                size_dimensions: catalog.size_dimensions,
+                                specification: catalog.specification ?? '',
+                                unit_rate: catalog.unit_rate
+                              } : {})
+                            } : x));
+                          }}
+                        />
+                      </label>
+                      <BoxDimensionInput
+                        required
+                        value={l.size_dimensions}
+                        onChange={val => setEditLines(editLines.map((x, i) => i === index ? { ...x, size_dimensions: val } : x))}
+                      />
+                      <label>
+                        Specification
+                        <input
+                          placeholder="Timber / Plywood type, finish"
+                          value={l.specification}
+                          onChange={e => setEditLines(editLines.map((x, i) => i === index ? { ...x, specification: e.target.value } : x))}
+                        />
+                      </label>
+                      <label>
+                        Quantity (Boxes)
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          required
+                          placeholder="e.g. 100"
+                          value={!l.ordered_qty ? '' : l.ordered_qty}
+                          onChange={e => setEditLines(editLines.map((x, i) => i === index ? { ...x, ordered_qty: e.target.value === '' ? '' as unknown as number : Number(e.target.value) } : x))}
+                        />
+                      </label>
+                      <label>
+                        Unit Rate (₹)
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step=".01"
+                          required={!editStock}
+                          placeholder="e.g. 250.00"
+                          value={!l.unit_rate ? '' : l.unit_rate}
+                          onChange={e => setEditLines(editLines.map((x, i) => i === index ? { ...x, unit_rate: e.target.value === '' ? '' as unknown as number : Number(e.target.value) } : x))}
+                        />
+                      </label>
+                      <label>
+                        Priority Level
+                        <ThemedSelect
+                          value={l.priority_signal}
+                          onChange={val => setEditLines(editLines.map((x, i) => i === index ? { ...x, priority_signal: val } : x))}
+                          options={['Red', 'Yellow', 'Green']}
+                        />
+                      </label>
+                      <label className="form-wide">
+                        Code / Item Remarks
+                        <textarea
+                          value={l.code_remarks}
+                          placeholder="Stencil notes, hardware details, treatment, etc."
+                          onChange={e => setEditLines(editLines.map((x, i) => i === index ? { ...x, code_remarks: e.target.value } : x))}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => setEditLines([...editLines, freshLine(editLines.length + 1)])}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Another Item
+                </Button>
+              </div>
+
+              <div className="form-actions mt-6">
+                <Button type="button" variant="outline" onClick={() => setEditOrder(null)}>Cancel</Button>
+                <Button type="submit" disabled={editBusy}>{editBusy ? 'Saving…' : 'Save Changes'}</Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
+
 
       {/* New Order Dialog */}
       <Dialog open={open} onOpenChange={handleOpenChange}>
