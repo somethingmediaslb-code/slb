@@ -6,7 +6,7 @@ import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
 import {useFactory} from './provider';
-import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,TableCalcBar,CrmTag,SegmentedMeter,Pill,Pagination,clearModalSearchParams,BoxDimensionInput} from './common';
+import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,AddButton,TableCalcBar,CrmTag,SegmentedMeter,Pill,Pagination,clearModalSearchParams} from './common';
 import {supabase} from '@/integrations/supabase/client';
 import {downloadCsv,money,dateLabel,number} from '@/lib/erp-data';
 import {toast} from 'sonner';
@@ -24,7 +24,7 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
     title:'Product Types',
     entity:'product specifications',
     add:'Add Product Type',
-    fields:[['box_type','Product Type'],['size_dimensions','Size Dimensions'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
+    fields:[['box_type','Product Type'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
   },
   workers:{
     title:'Labour Master',
@@ -45,20 +45,10 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
   const [editing,setEditing]=useState<Record<string,unknown>|null>(null);
   const [viewPartyId,setViewPartyId]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
-  const [itemDims,setItemDims]=useState('');
-
-  useEffect(()=>{
-    if(editing?.['size_dimensions']){
-      setItemDims(String(editing['size_dimensions']));
-    } else {
-      setItemDims('');
-    }
-  },[editing,open]);
 
   useEffect(()=>{
     if(searchParams.new&&user){
       setEditing(null);
-      setItemDims('');
       setOpen(true);
       clearModalSearchParams(navigate);
     }
@@ -68,7 +58,6 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
     setOpen(isOpen);
     if (!isOpen) {
       setEditing(null);
-      setItemDims('');
       clearModalSearchParams(navigate);
     }
   };
@@ -148,15 +137,9 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
         setBusy(false);
         return;
       }
-      const dims = String(values['size_dimensions'] ?? '').trim();
-      if (!dims) {
-        toast.error('Please enter complete box dimensions (Length × Width × Height).');
-        setBusy(false);
-        return;
-      }
       const v={
         box_type:boxType,
-        size_dimensions:dims,
+        size_dimensions:String(values['size_dimensions'] ?? editing?.['size_dimensions'] ?? 'Standard').trim(),
         specification:String(values['specification'] ?? '').trim(),
         unit_rate:Math.max(0, Number(values['unit_rate']) || 0)
       };
@@ -394,7 +377,6 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
           if (kind === 'items') {
             const boxType = String(r['box_type'] || 'Custom Box');
             const spec = String(r['specification'] || 'Standard');
-            const dims = String(r['size_dimensions'] || '—');
             const rate = Number(r['unit_rate'] || 0);
             return (
               <div
@@ -408,9 +390,9 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
                 <div className="mobile-card-top">
                   <div className="mobile-card-title-group">
                     <div className="mobile-card-title">{boxType}</div>
-                    <div className="mobile-card-sub">{dims}</div>
+                    <div className="mobile-card-sub">{spec}</div>
                   </div>
-                  <CrmTag label={spec} variant="blue" />
+                  <CrmTag label={money(rate)} variant="blue" />
                 </div>
 
                 <div className="mobile-card-grid">
@@ -419,8 +401,8 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
                     <span className="mobile-card-value">{money(rate)}</span>
                   </div>
                   <div className="mobile-card-field">
-                    <span className="mobile-card-label">Dimensions</span>
-                    <span className="mobile-card-value">{dims}</span>
+                    <span className="mobile-card-label">Specification</span>
+                    <span className="mobile-card-value">{spec}</span>
                   </div>
                 </div>
 
@@ -661,24 +643,13 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
           <form onSubmit={submit}>
             <div className="form-grid">
               {c.fields.map(([key,label],i)=>{
-                if (kind === 'items' && key === 'size_dimensions') {
-                  return (
-                    <BoxDimensionInput
-                      key={key}
-                      name="size_dimensions"
-                      value={itemDims}
-                      onChange={setItemDims}
-                      required
-                    />
-                  );
-                }
                 return (
                   <label key={key} className={key==='address'?'form-wide':''}>
                     {label}
                     <input
                       name={key}
                       defaultValue={String(editing?.[key]??'')}
-                      required={i===0||(kind==='items'&&i===1)}
+                      required={i===0}
                       type={key.includes('rate')?'number':key==='email'?'email':'text'}
                       min={0}
                       step={key.includes('rate')?'.01':undefined}
