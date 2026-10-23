@@ -143,6 +143,16 @@ async function readFactory(): Promise<FactoryData> {
     })
   );
 
+  // Keep orders sorted newest first by default across the ERP
+  if (Array.isArray(result.orders)) {
+    result.orders.sort((a, b) => {
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.order_date ? new Date(a.order_date).getTime() : 0);
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.order_date ? new Date(b.order_date).getTime() : 0);
+      if (timeB !== timeA) return timeB - timeA;
+      return (b.order_no || '').localeCompare(a.order_no || '', undefined, { numeric: true });
+    });
+  }
+
   // Merge any locally acknowledged roles
   const localRoles = getLocalRoles();
   for (const [uid, role] of Object.entries(localRoles)) {

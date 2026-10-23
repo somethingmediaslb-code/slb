@@ -318,7 +318,15 @@ export function Orders(){
     return matchesParty && matchesSearch;
   });
 
-  const filtered = baseFiltered;
+  // Sort newest orders first (created_at timestamp, order_date, fallback order_no descending)
+  const filtered = [...baseFiltered].sort((a, b) => {
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.order_date ? new Date(a.order_date).getTime() : 0);
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.order_date ? new Date(b.order_date).getTime() : 0);
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+    return (b.order_no || '').localeCompare(a.order_no || '', undefined, { numeric: true });
+  });
 
   useEffect(() => {
     setPage(1);
@@ -502,7 +510,9 @@ export function Orders(){
   // Selected order details for sheet
   const activeOrder=d.orders.find(o=>o.id===viewOrderId);
   const activeParty=activeOrder?d.parties.find(p=>p.id===activeOrder.party_id):null;
-  const activeItems=activeOrder?d.items.filter(i=>i.order_id===activeOrder.id):[];
+  const activeItems = activeOrder
+    ? d.items.filter(i => i.order_id === activeOrder.id).sort((a, b) => (a.sr_no || 0) - (b.sr_no || 0))
+    : [];
   const activeTotalQty=activeItems.reduce((s,i)=>s+i.ordered_qty,0);
   const activeCompletedQty=activeItems.reduce((s,i)=>s+i.completed_qty,0);
   const activeDispatchedQty=activeItems.reduce((s,i)=>s+i.dispatched_qty,0);
