@@ -11,7 +11,8 @@ import {supabase} from '@/integrations/supabase/client';
 import {toast} from 'sonner';
 
 export function Labour(){
-  const {data:d,action,isAdmin,refresh}=useFactory();
+  const {data:d,action,isAdmin,hasCapability,refresh}=useFactory();
+  const canRecordPayment = isAdmin || hasCapability('record_payment') || hasCapability('run_payroll');
   const [deptTab, setDeptTab] = useState<'production' | 'transport'>('production');
 
   // Transport Labour Department state
@@ -40,7 +41,7 @@ export function Labour(){
   const pageSize = 10;
 
   // Payroll & Ledger worker search and date mode
-  const [ledgerMode, setLedgerMode] = useState<'all_time' | 'filtered'>('all_time');
+  const [ledgerMode, setLedgerMode] = useState<'all_time' | 'date_filtered'>('all_time');
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [statementRange, setStatementRange] = useState<'All' | 'Today' | 'Yesterday' | 'Week' | 'Month'>('All');
 
@@ -120,6 +121,7 @@ export function Labour(){
     return name.includes(q) || veh.includes(q) || phone.includes(q) || unit.includes(q);
   });
 
+  const paginatedAllocations = filteredAllocations.slice((allocPage - 1) * pageSize, allocPage * pageSize);
   const paginatedTransport = filteredTransportWorkers.slice((transportPage - 1) * pageSize, transportPage * pageSize);
   const filteredLedgerWorkers = productionWorkers.filter(w => {
     if (!ledgerSearch) return true;
@@ -229,7 +231,15 @@ export function Labour(){
   async function deleteTransporter(w: Row<'labour_master'>) {
     if (!window.confirm(`Are you sure you want to delete transporter "${w.labour_name}"? This cannot be undone.`)) return;
     setTransportBusy(true);
-    const { error } = await (supabase.from as any)('labour_master').delete().eq('id', w.id);
+    const rpcRes = await (supabase.rpc as any)('soft_delete_record', {
+      target_table: 'labour_master',
+      target_id: w.id
+    });
+    let error = rpcRes.error;
+    if (error) {
+      const { error: directErr } = await (supabase.from as any)('labour_master').delete().eq('id', w.id);
+      error = directErr;
+    }
     setTransportBusy(false);
     if (error) {
       toast.error(error.message);
@@ -719,13 +729,10 @@ export function Labour(){
 
         <Pagination
           currentPage={allocPage}
-          totalItems={d.allocations.length}
+          totalItems={filteredAllocations.length}
           pageSize={pageSize}
           onPageChange={setAllocPage}
         />
-
-        {/* Labour & Production Volume Charts */}
-        <VolumeCharts />
       </section>
 
       <section className="mt-8">
@@ -910,7 +917,7 @@ export function Labour(){
 
         <Pagination
           currentPage={payrollPage}
-          totalItems={d.workers.length}
+          totalItems={filteredLedgerWorkers.length}
           pageSize={pageSize}
           onPageChange={setPayrollPage}
         />
@@ -1009,7 +1016,7 @@ export function Labour(){
                     <td className="numeric font-medium text-amber-500">{money(balance)}</td>
                     <td><Pill value={p.status ?? 'Pending'}/></td>
                     <td className="text-right">
-                      {!isPaid && isAdmin && (
+                      {!isPaid && canRecordPayment && (
                         <Button
                           size="sm"
                           variant="outline"
@@ -1073,7 +1080,7 @@ export function Labour(){
                   </div>
                 </div>
 
-                {!isPaid && isAdmin && (
+                {!isPaid && canRecordPayment && (
                   <div className="mobile-card-actions">
                     <Button
                       size="sm"

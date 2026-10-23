@@ -246,13 +246,13 @@ export function UnderProduction() {
       {/* Priority Tabs */}
       <ViewTabs
         tabs={[
-          { key: 'All', label: 'All Active' },
-          { key: 'Red', label: 'Urgent Red' },
-          { key: 'Yellow', label: 'Medium Yellow' },
-          { key: 'Green', label: 'Standard Green' }
+          { id: 'All', label: 'All Active' },
+          { id: 'Red', label: 'Urgent Red' },
+          { id: 'Yellow', label: 'Medium Yellow' },
+          { id: 'Green', label: 'Standard Green' }
         ]}
         active={priorityTab}
-        onChange={setPriorityTab}
+        onChange={id => setPriorityTab(id as 'Red' | 'Yellow' | 'Green' | 'All')}
       />
 
       {/* Filters Toolbar */}

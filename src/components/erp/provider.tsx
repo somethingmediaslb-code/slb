@@ -37,9 +37,9 @@ export const DEFAULT_ROLE_PAGES: Record<AppRole, string[]> = {
   user: ['dashboard', 'orders', 'production', 'under_production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
   manager: ['dashboard', 'orders', 'production', 'under_production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
   supervisor: ['dashboard', 'production', 'under_production', 'workers', 'parties', 'profile'],
-  accountant: ['dashboard', 'dispatch', 'expenses', 'reports', 'profile'],
-  dispatch_clerk: ['dashboard', 'dispatch', 'orders', 'catalog', 'profile'],
-  viewer: ['dashboard', 'orders', 'production', 'under_production', 'profile'],
+  accountant: ['dashboard', 'dispatch', 'workers', 'expenses', 'reports', 'profile'],
+  dispatch_clerk: ['dashboard', 'dispatch', 'orders', 'catalog', 'workers', 'profile'],
+  viewer: ['dashboard', 'orders', 'production', 'under_production', 'workers', 'profile'],
   pending: [],
 };
 
@@ -463,6 +463,10 @@ export function FactoryProvider({ children }: { children: ReactNode }) {
     if (isPendingVerification || userRole === 'pending') return false;
     if (isAdmin) return true;
     if (pageKey === 'admin' || pageKey === 'permissions') return false;
+    // Guarantee Labour Management access for operational workspace roles per PRD
+    if (pageKey === 'workers' && (userRole === 'user' || userRole === 'manager' || userRole === 'supervisor' || userRole === 'accountant' || userRole === 'dispatch_clerk' || userRole === 'viewer')) {
+      return true;
+    }
     return userAllowedPages.includes(pageKey);
   };
 
