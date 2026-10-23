@@ -523,6 +523,13 @@ export function Orders(){
   // Form live preview values
   const formTotalUnits=lines.reduce((s,l)=>s+(Number(l.ordered_qty)||0),0);
   const formTotalValue=lines.reduce((s,l)=>s+((Number(l.ordered_qty)||0)*(Number(l.unit_rate)||0)),0);
+  const formTotalLabourCost = lines.reduce((s, l) => {
+    const catalogItem = d.catalog.find(i => i.box_type.toLowerCase() === l.box_type?.toLowerCase() || i.box_type === l.box_type);
+    const pieceCost = Number(catalogItem?.default_labour_rate ?? catalogItem?.unit_rate ?? 0);
+    return s + ((Number(l.ordered_qty) || 0) * pieceCost);
+  }, 0);
+  const formTotalProfit = formTotalValue - formTotalLabourCost;
+  const formProfitMargin = formTotalValue > 0 ? Math.round((formTotalProfit / formTotalValue) * 100) : 0;
 
   return (
     <>
@@ -1075,8 +1082,7 @@ export function Orders(){
                               box_type: val,
                               ...(catalog ? {
                                 size_dimensions: catalog.size_dimensions,
-                                specification: catalog.specification ?? '',
-                                unit_rate: catalog.unit_rate
+                                specification: catalog.specification ?? ''
                               } : {})
                             } : x));
                           }}
@@ -1108,7 +1114,10 @@ export function Orders(){
                         />
                       </label>
                       <label>
-                        Unit Rate (₹)
+                        <div className="flex items-center justify-between">
+                          <span>Selling Price (₹)</span>
+                          <span className="text-[11px] text-muted-foreground font-normal">Per Box</span>
+                        </div>
                         <input
                           type="number"
                           inputMode="decimal"
@@ -1137,6 +1146,31 @@ export function Orders(){
                         />
                       </label>
                     </div>
+                    {(() => {
+                      const catalogItem = d.catalog.find(i => i.box_type.toLowerCase() === l.box_type?.toLowerCase() || i.box_type === l.box_type);
+                      const pieceCost = Number(catalogItem?.default_labour_rate ?? catalogItem?.unit_rate ?? 0);
+                      const qty = Number(l.ordered_qty) || 0;
+                      const price = Number(l.unit_rate) || 0;
+                      const rev = qty * price;
+                      const lab = qty * pieceCost;
+                      const prof = rev - lab;
+                      const marginPct = rev > 0 ? Math.round((prof / rev) * 100) : 0;
+                      return (
+                        <div className="mt-2.5 p-2 rounded-lg bg-secondary/40 border border-border/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div className="flex items-center gap-3">
+                            <span>Selling Revenue: <strong className="text-foreground">{money(rev)}</strong></span>
+                            {pieceCost > 0 && (
+                              <span className="text-muted-foreground">Labour Cost: <strong className="text-amber-500 font-medium">{money(lab)}</strong> ({money(pieceCost)}/box)</span>
+                            )}
+                          </div>
+                          {pieceCost > 0 && rev > 0 && (
+                            <span className="text-muted-foreground">
+                              Est. Profit: <strong className={prof >= 0 ? "text-emerald-500 font-bold" : "text-destructive font-bold"}>{money(prof)} ({marginPct}%)</strong>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -1262,8 +1296,7 @@ export function Orders(){
                             box_type: val,
                             ...(catalog?{
                               size_dimensions: catalog.size_dimensions,
-                              specification: catalog.specification ?? '',
-                              unit_rate: catalog.unit_rate
+                              specification: catalog.specification ?? ''
                             }:{})
                           }:x));
                         }}
@@ -1295,7 +1328,10 @@ export function Orders(){
                       />
                     </label>
                     <label>
-                      Unit Rate (₹)
+                      <div className="flex items-center justify-between">
+                        <span>Selling Price (₹)</span>
+                        <span className="text-[11px] text-muted-foreground font-normal">Per Box</span>
+                      </div>
                       <input
                         type="number"
                         inputMode="decimal"
@@ -1324,9 +1360,31 @@ export function Orders(){
                       />
                     </label>
                   </div>
-                  <div className="mt-2 text-right numeric text-xs text-muted-foreground">
-                    Item Total: <strong className="text-foreground">{money(l.ordered_qty*l.unit_rate)}</strong>
-                  </div>
+                  {(() => {
+                    const catalogItem = d.catalog.find(i => i.box_type.toLowerCase() === l.box_type?.toLowerCase() || i.box_type === l.box_type);
+                    const pieceCost = Number(catalogItem?.default_labour_rate ?? catalogItem?.unit_rate ?? 0);
+                    const qty = Number(l.ordered_qty) || 0;
+                    const price = Number(l.unit_rate) || 0;
+                    const rev = qty * price;
+                    const lab = qty * pieceCost;
+                    const prof = rev - lab;
+                    const marginPct = rev > 0 ? Math.round((prof / rev) * 100) : 0;
+                    return (
+                      <div className="mt-2.5 p-2.5 rounded-lg bg-secondary/40 border border-border/60 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-3">
+                          <span>Selling Revenue: <strong className="text-foreground">{money(rev)}</strong></span>
+                          {pieceCost > 0 && (
+                            <span className="text-muted-foreground">Labour Cost: <strong className="text-amber-500 font-medium">{money(lab)}</strong> ({money(pieceCost)}/box)</span>
+                          )}
+                        </div>
+                        {pieceCost > 0 && rev > 0 && (
+                          <span className="text-muted-foreground">
+                            Est. Gross Profit: <strong className={prof >= 0 ? "text-emerald-500 font-bold" : "text-destructive font-bold"}>{money(prof)} ({marginPct}%)</strong>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
@@ -1340,12 +1398,20 @@ export function Orders(){
             {/* Live Form Summary Banner */}
             <div className="form-calc-banner">
               <div>
-                <span className="text-muted-foreground block text-xs">Total Units:</span>
-                <strong className="text-foreground font-semibold text-base">{number(formTotalUnits)} boxes</strong>
+                <span className="text-muted-foreground block text-xs">Total Units & Revenue:</span>
+                <strong className="text-foreground font-semibold text-base">{number(formTotalUnits)} boxes · {money(formTotalValue)}</strong>
               </div>
+              {formTotalLabourCost > 0 && (
+                <div>
+                  <span className="text-muted-foreground block text-xs">Est. Total Labour Cost:</span>
+                  <strong className="text-amber-500 font-semibold text-sm">{money(formTotalLabourCost)}</strong>
+                </div>
+              )}
               <div className="text-right">
-                <span className="text-muted-foreground block text-xs">Estimated Order Value:</span>
-                <strong className="text-foreground font-semibold text-base">{money(formTotalValue)}</strong>
+                <span className="text-muted-foreground block text-xs">Est. Order Profit:</span>
+                <strong className={formTotalProfit >= 0 ? "text-emerald-500 font-semibold text-base" : "text-destructive font-semibold text-base"}>
+                  {money(formTotalProfit)} {formTotalValue > 0 ? `(${formProfitMargin}%)` : ''}
+                </strong>
               </div>
             </div>
 

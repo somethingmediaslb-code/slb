@@ -29,6 +29,7 @@ import {
   BarChart3,
   KeyRound,
   MoreHorizontal,
+  Timer,
 } from 'lucide-react';
 import {Button} from '@/components/ui/button';
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from '@/components/ui/sheet';
@@ -189,6 +190,7 @@ export const mainNav = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, key: 'dashboard' },
   { to: '/orders', label: 'Order Entry', icon: ClipboardList, key: 'orders' },
   { to: '/production', label: 'Pending Production', icon: Factory, key: 'production' },
+  { to: '/under-production', label: 'Under Production', icon: Timer, key: 'under_production' },
   { to: '/dispatch', label: 'Dispatch & Delivery Challan', icon: Truck, key: 'dispatch' },
 ] as const;
 
@@ -450,6 +452,7 @@ export function AppShell({children}:{children:ReactNode}){
                   const count =
                     n.key === 'orders' ? data.orders.length
                     : n.key === 'production' ? activeRunsCount
+                    : n.key === 'under_production' ? data.allocations.filter(a => a.completed_qty < a.allocated_qty && a.status !== 'Completed').length
                     : n.key === 'dispatch' ? data.challans.length
                     : undefined;
 

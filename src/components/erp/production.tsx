@@ -148,23 +148,36 @@ export function Production() {
     setDurationHours(0);
     setDurationMinutes(0);
     setDurationSeconds(30);
+
+    // Auto-fetch labour piece rate from Product Type Master
+    const catalogItem = d.catalog.find(c => c.box_type.toLowerCase() === item.box_type.toLowerCase() || c.box_type === item.box_type);
+    const productLabourRate = Number(catalogItem?.default_labour_rate ?? catalogItem?.unit_rate ?? 0);
+
     if (d.workers.length > 0) {
       const initialWorker = d.workers[0];
       if (initialWorker) {
         setSelectedLabourId(initialWorker.id);
-        setRate(initialWorker.daily_rate);
+        // Prioritize product piece rate if configured; otherwise fall back to worker rate
+        setRate(productLabourRate > 0 ? productLabourRate : (initialWorker.daily_rate || ''));
       }
     } else {
       setSelectedLabourId('');
-      setRate('');
+      setRate(productLabourRate > 0 ? productLabourRate : '');
     }
   };
 
   const handleWorkerChange = (workerId: string) => {
     setSelectedLabourId(workerId);
-    const worker = d.workers.find(w => w.id === workerId);
-    if (worker) {
-      setRate(worker.daily_rate);
+    // Keep fetched product labour rate if set; otherwise use worker rate
+    const catalogItem = selected ? d.catalog.find(c => c.box_type.toLowerCase() === selected.box_type.toLowerCase() || c.box_type === selected.box_type) : null;
+    const productLabourRate = Number(catalogItem?.default_labour_rate ?? catalogItem?.unit_rate ?? 0);
+    if (productLabourRate > 0) {
+      if (!rate || rate === 0) setRate(productLabourRate);
+    } else {
+      const worker = d.workers.find(w => w.id === workerId);
+      if (worker && worker.daily_rate > 0) {
+        setRate(worker.daily_rate);
+      }
     }
   };
 
@@ -299,6 +312,38 @@ export function Production() {
                         {i.size_dimensions}
                       </span>
                     </div>
+                    {/* Render each working and completed batch directly without needing to click modal */}
+                    {itemAllocations.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1 items-center max-w-sm">
+                        {itemAllocations.map((a, idx) => {
+                          const w = d.workers.find(wk => wk.id === a.labour_id);
+                          const isDone = a.completed_qty >= a.allocated_qty;
+                          const timing = formatRemaining(nowTick, a.tentative_completion, a.start_time);
+                          return (
+                            <span
+                              key={a.id}
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono border ${
+                                isDone
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                  : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30'
+                              }`}
+                              title={`Batch #${idx + 1}: ${w?.labour_name || 'Worker'} · ${a.allocated_qty} boxes @ ${money(a.labour_rate)}/box`}
+                            >
+                              <span className="font-sans font-medium text-foreground">
+                                B#{idx + 1}: {w?.labour_name || 'Worker'} ({number(a.allocated_qty)}b)
+                              </span>
+                              {isDone ? (
+                                <span className="text-emerald-500 font-semibold">✓ Done</span>
+                              ) : (
+                                <span className="font-semibold text-blue-500 flex items-center gap-0.5">
+                                  <Clock className="w-2.5 h-2.5 animate-spin" /> {timing.text}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td className="numeric font-medium text-foreground">{number(i.ordered_qty)}</td>
                   <td className="numeric text-blue-600 dark:text-blue-400 font-medium">{number(i.allocated_qty)}</td>
@@ -857,7 +902,13 @@ export function Production() {
                     <label>
                       <div className="flex items-center justify-between">
                         <span>Labour Rate Per Box (₹)</span>
-                        <span className="text-[11px] text-muted-foreground font-normal">Fetched from Master</span>
+                        <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                          {(() => {
+                            const cat = selected ? d.catalog.find(c => c.box_type.toLowerCase() === selected.box_type.toLowerCase() || c.box_type === selected.box_type) : null;
+                            const catRate = Number(cat?.default_labour_rate ?? cat?.unit_rate ?? 0);
+                            return catRate > 0 ? `Auto-fetched: ₹${catRate}/box` : 'Fetched from Master';
+                          })()}
+                        </span>
                       </div>
                       <input
                         type="number"

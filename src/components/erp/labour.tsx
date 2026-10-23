@@ -5,7 +5,7 @@ import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {MasterPage} from './masters';
 import {useFactory} from './provider';
 import {Empty,Pill,Pagination,DateFilterPill,FilterToken,ExportButton,ThemedSelect,ThemedDatePicker,clearModalSearchParams,ViewTabs,SearchFilter,WhatsAppIcon} from './common';
-import {money,number,dateLabel,downloadCsv,today,type Row} from '@/lib/erp-data';
+import {money,number,dateLabel,downloadCsv,today,formatLocalDate,type Row} from '@/lib/erp-data';
 import {Truck,Plus,Pencil,Trash2,CheckCircle2} from 'lucide-react';
 import {supabase} from '@/integrations/supabase/client';
 import {toast} from 'sonner';
@@ -25,7 +25,11 @@ export function Labour(){
   const [statementWorker,setStatementWorker]=useState<Row<'labour_master'>|null>(null);
   const [borrowModalOpen,setBorrowModalOpen]=useState(false);
   const [borrowLabourId,setBorrowLabourId]=useState('');
-  const [prodRange,setProdRange]=useState<'All'|'Day'|'Week'|'Month'|'Custom'>('All');
+
+  // Productivity Tracking: Worker & Date Filters
+  const [allocWorkerId, setAllocWorkerId] = useState('All');
+  const [prodRange,setProdRange]=useState<'All'|'Today'|'Yesterday'|'Week'|'Month'|'Exact'|'Custom'>('All');
+  const [prodSpecificDate, setProdSpecificDate] = useState('');
   const [prodCustomFrom,setProdCustomFrom]=useState('');
   const [prodCustomTo,setProdCustomTo]=useState('');
   const [busy,setBusy]=useState(false);
@@ -35,24 +39,43 @@ export function Labour(){
   const [historyPage, setHistoryPage] = useState(1);
   const pageSize = 10;
 
+  // Payroll & Ledger worker search and date mode
+  const [ledgerMode, setLedgerMode] = useState<'all_time' | 'filtered'>('all_time');
+  const [ledgerSearch, setLedgerSearch] = useState('');
+  const [statementRange, setStatementRange] = useState<'All' | 'Today' | 'Yesterday' | 'Week' | 'Month'>('All');
+
   // Payroll date-wise report and status filter
   const [payrollFrom, setPayrollFrom] = useState('');
   const [payrollTo, setPayrollTo] = useState('');
   const [payrollStatus, setPayrollStatus] = useState('All');
   const [payrollWorkerId, setPayrollWorkerId] = useState('All');
 
-  // Filter allocations based on productivity range
+  // Filter allocations based on worker and date range
   const now = new Date();
+  const todayStr = formatLocalDate(now);
+  const yesterdayDate = new Date(now.getTime() - 86400000);
+  const yesterdayStr = formatLocalDate(yesterdayDate);
+
   const filteredAllocations = d.allocations.filter(a => {
+    if (allocWorkerId !== 'All' && a.labour_id !== allocWorkerId) return false;
+    const aDateStr = a.start_time ? a.start_time.slice(0, 10) : '';
     if (prodRange === 'All') return true;
-    const date = new Date(a.start_time);
-    if (prodRange === 'Day') return date.toDateString() === now.toDateString();
-    if (prodRange === 'Week') return (now.getTime() - date.getTime()) <= 7 * 86400000;
-    if (prodRange === 'Month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    if (prodRange === 'Exact') {
+      return prodSpecificDate ? aDateStr === prodSpecificDate : true;
+    }
+    if (prodRange === 'Today') return aDateStr === todayStr;
+    if (prodRange === 'Yesterday') return aDateStr === yesterdayStr;
+    if (prodRange === 'Week') {
+      const date = new Date(a.start_time);
+      return (now.getTime() - date.getTime()) <= 7 * 86400000;
+    }
+    if (prodRange === 'Month') {
+      const date = new Date(a.start_time);
+      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+    }
     if (prodRange === 'Custom') {
-      const dStr = a.start_time.slice(0, 10);
-      if (prodCustomFrom && dStr < prodCustomFrom) return false;
-      if (prodCustomTo && dStr > prodCustomTo) return false;
+      if (prodCustomFrom && aDateStr < prodCustomFrom) return false;
+      if (prodCustomTo && aDateStr > prodCustomTo) return false;
       return true;
     }
     return true;
@@ -60,6 +83,8 @@ export function Labour(){
 
   const totalAssigned = filteredAllocations.reduce((s, a) => s + a.allocated_qty, 0);
   const totalCompleted = filteredAllocations.reduce((s, a) => s + a.completed_qty, 0);
+  const totalEarnedForPeriod = filteredAllocations.reduce((s, a) => s + (a.completed_qty * (a.labour_rate || 0)), 0);
+  const totalUnpaidForPeriod = filteredAllocations.reduce((s, a) => s + Math.max(0, (a.completed_qty * (a.labour_rate || 0)) - (a.paid_earnings || 0)), 0);
   const totalPending = Math.max(0, totalAssigned - totalCompleted);
   const completionRate = totalAssigned > 0 ? Math.round((totalCompleted / totalAssigned) * 100) : 0;
 
@@ -96,8 +121,12 @@ export function Labour(){
   });
 
   const paginatedTransport = filteredTransportWorkers.slice((transportPage - 1) * pageSize, transportPage * pageSize);
-  const paginatedAllocations = filteredAllocations.slice((allocPage - 1) * pageSize, allocPage * pageSize);
-  const paginatedWorkers = productionWorkers.slice((payrollPage - 1) * pageSize, payrollPage * pageSize);
+  const filteredLedgerWorkers = productionWorkers.filter(w => {
+    if (!ledgerSearch) return true;
+    const q = ledgerSearch.toLowerCase();
+    return (w.labour_name || '').toLowerCase().includes(q) || (w.unit_assignment || '').toLowerCase().includes(q);
+  });
+  const paginatedWorkers = filteredLedgerWorkers.slice((payrollPage - 1) * pageSize, payrollPage * pageSize);
   const paginatedPayroll = filteredPayroll.slice((historyPage - 1) * pageSize, historyPage * pageSize);
 
   async function complete(e:React.FormEvent<HTMLFormElement>){
@@ -467,21 +496,44 @@ export function Labour(){
         <>
           <MasterPage kind="workers" title="Production Labour Management" department="Production"/>
           <section className="mt-8">
-        <div className="section-header flex items-center justify-between gap-4">
-          <h2>Production Allocations & Productivity Tracking</h2>
-          <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="section-header flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2>Production Allocations & Productivity Tracking</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Filter by worker and date to see exact finished work and wages to be paid.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <FilterToken
+              label="Worker"
+              value={allocWorkerId}
+              onChange={v => { setAllocWorkerId(v); setAllocPage(1); }}
+              options={[
+                { value: 'All', label: 'All Workers' },
+                ...productionWorkers.map(w => ({ value: w.id, label: w.labour_name }))
+              ]}
+            />
+
             <div className="flex items-center gap-1 bg-card border border-border p-0.5 rounded-lg text-xs h-8 shadow-xs">
-              {(['All', 'Day', 'Week', 'Month', 'Custom'] as const).map(r => (
+              {(['All', 'Today', 'Yesterday', 'Week', 'Month', 'Exact', 'Custom'] as const).map(r => (
                 <button
                   key={r}
                   type="button"
                   className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${prodRange === r ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                  onClick={() => { setProdRange(r); setAllocPage(1); }}
+                  onClick={() => {
+                    setProdRange(r);
+                    if (r === 'Exact' && !prodSpecificDate) setProdSpecificDate(today());
+                    setAllocPage(1);
+                  }}
                 >
-                  {r === 'All' ? 'All Time' : r === 'Custom' ? 'Custom Range' : `This ${r}`}
+                  {r === 'All' ? 'All Time' : r === 'Exact' ? 'Pick Date' : r === 'Custom' ? 'Custom Range' : r === 'Week' ? 'This Week' : r === 'Month' ? 'This Month' : r}
                 </button>
               ))}
             </div>
+
+            {prodRange === 'Exact' && (
+              <DateFilterPill label="Date" value={prodSpecificDate} onChange={v => { setProdSpecificDate(v); setAllocPage(1); }} placeholder="Select Date" />
+            )}
 
             {prodRange === 'Custom' && (
               <div className="flex items-center gap-2">
@@ -492,8 +544,8 @@ export function Labour(){
           </div>
         </div>
 
-        {/* Productivity Summary Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
+        {/* Productivity & Monetary Summary Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 my-4">
           <div className="p-3 bg-card border border-border rounded-xl">
             <span className="text-xs text-muted-foreground block">Assigned Qty</span>
             <strong className="text-base font-semibold text-foreground">{number(totalAssigned)} boxes</strong>
@@ -503,8 +555,12 @@ export function Labour(){
             <strong className="text-base font-semibold text-emerald-500">{number(totalCompleted)} boxes</strong>
           </div>
           <div className="p-3 bg-card border border-border rounded-xl">
-            <span className="text-xs text-muted-foreground block">Pending Qty</span>
-            <strong className="text-base font-semibold text-amber-500">{number(totalPending)} boxes</strong>
+            <span className="text-xs text-muted-foreground block">Wages Earned (Selected)</span>
+            <strong className="text-base font-bold text-emerald-500">{money(totalEarnedForPeriod)}</strong>
+          </div>
+          <div className="p-3 bg-card border border-border rounded-xl">
+            <span className="text-xs text-muted-foreground block">Unpaid Balance</span>
+            <strong className="text-base font-semibold text-amber-500">{money(totalUnpaidForPeriod)}</strong>
           </div>
           <div className="p-3 bg-card border border-border rounded-xl">
             <span className="text-xs text-muted-foreground block">Completion Rate</span>
@@ -522,6 +578,8 @@ export function Labour(){
                 <th>Product Type & Size</th>
                 <th className="numeric">Assigned</th>
                 <th className="numeric">Produced</th>
+                <th className="numeric">Rate / Box</th>
+                <th className="numeric">Earned Amount</th>
                 <th className="numeric">Pending</th>
                 <th>Progress</th>
                 <th>Scheduled Start</th>
@@ -537,6 +595,7 @@ export function Labour(){
                 const worker = d.workers.find(w=>w.id===a.labour_id);
                 const pending = Math.max(0, a.allocated_qty - a.completed_qty);
                 const progressPct = a.allocated_qty > 0 ? Math.round((a.completed_qty / a.allocated_qty) * 100) : 0;
+                const earned = a.completed_qty * (a.labour_rate || 0);
 
                 return (
                   <tr key={a.id}>
@@ -550,6 +609,8 @@ export function Labour(){
                     </td>
                     <td className="numeric font-medium">{number(a.allocated_qty)}</td>
                     <td className="numeric text-emerald-500 font-medium">{number(a.completed_qty)}</td>
+                    <td className="numeric font-medium text-foreground">{money(a.labour_rate)}</td>
+                    <td className="numeric text-emerald-500 font-semibold">{money(earned)}</td>
                     <td className="numeric font-medium text-foreground">{number(pending)}</td>
                     <td>{progressPct}%</td>
                     <td className="text-xs text-muted-foreground">
@@ -567,9 +628,29 @@ export function Labour(){
                   </tr>
                 );
               }) : (
-                <Empty columns={11} label="No production allocations found"/>
+                <Empty columns={13} label="No production allocations found for selected filter"/>
               )}
             </tbody>
+            {filteredAllocations.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-border bg-muted/20 font-medium">
+                  <td colSpan={4} className="text-right text-xs text-muted-foreground font-medium px-3 py-2.5">
+                    Filter Totals ({filteredAllocations.length} allocations):
+                  </td>
+                  <td className="numeric text-emerald-500 font-medium px-3 py-2.5 tabular-nums">
+                    {number(totalCompleted)} boxes
+                  </td>
+                  <td className="numeric text-muted-foreground px-3 py-2.5">—</td>
+                  <td className="numeric text-emerald-500 font-bold px-3 py-2.5 tabular-nums">
+                    {money(totalEarnedForPeriod)}
+                  </td>
+                  <td className="numeric text-amber-500 font-medium px-3 py-2.5 tabular-nums">
+                    {number(totalPending)}
+                  </td>
+                  <td colSpan={5} />
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
 
@@ -580,6 +661,7 @@ export function Labour(){
             const boxType = d.items.find(i=>i.id===a.order_item_id)?.box_type || '—';
             const pending = a.allocated_qty - a.completed_qty;
             const pct = Math.round((a.completed_qty / (a.allocated_qty || 1)) * 100);
+            const earned = a.completed_qty * (a.labour_rate || 0);
             return (
               <div key={a.id} className="mobile-record-card">
                 <div className="mobile-card-top">
@@ -598,6 +680,14 @@ export function Labour(){
                   <div className="mobile-card-field">
                     <span className="mobile-card-label">Completed</span>
                     <span className="mobile-card-value font-semibold text-foreground">{number(a.completed_qty)}</span>
+                  </div>
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Labour Rate</span>
+                    <span className="mobile-card-value">{money(a.labour_rate)}/box</span>
+                  </div>
+                  <div className="mobile-card-field">
+                    <span className="mobile-card-label">Earned Pay</span>
+                    <span className="mobile-card-value text-emerald-500 font-bold">{money(earned)}</span>
                   </div>
                   <div className="mobile-card-field">
                     <span className="mobile-card-label">Pending</span>
@@ -639,11 +729,41 @@ export function Labour(){
       </section>
 
       <section className="mt-8">
-        <div className="section-header flex items-center justify-between">
-          <h2>Payroll & Worker Ledger</h2>
-          <Button size="sm" variant="outline" onClick={()=>{ setBorrowLabourId(d.workers[0]?.id??''); setBorrowModalOpen(true); }}>
-            Record Borrowing
-          </Button>
+        <div className="section-header flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <h2>Payroll & Worker Ledger</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {ledgerMode === 'date_filtered'
+                ? `Daily work & wages breakdown for ${prodRange === 'Today' ? 'Today' : prodRange === 'Yesterday' ? 'Yesterday' : prodRange === 'Exact' ? prodSpecificDate : 'selected date filter'}`
+                : 'All-time cumulative unpaid balances & ledger due'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-card border border-border p-0.5 rounded-lg text-xs h-8 shadow-xs">
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${ledgerMode === 'all_time' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setLedgerMode('all_time')}
+              >
+                All-Time Balance
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${ledgerMode === 'date_filtered' ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                onClick={() => setLedgerMode('date_filtered')}
+              >
+                Daily / Filtered Work
+              </button>
+            </div>
+            <SearchFilter
+              value={ledgerSearch}
+              onChange={v => { setLedgerSearch(v); setPayrollPage(1); }}
+              placeholder="Search worker name…"
+            />
+            <Button size="sm" variant="outline" onClick={()=>{ setBorrowLabourId(d.workers[0]?.id??''); setBorrowModalOpen(true); }}>
+              Record Borrowing
+            </Button>
+          </div>
         </div>
 
         {/* Desktop Table View */}
@@ -652,32 +772,57 @@ export function Labour(){
             <thead>
               <tr>
                 <th>Worker</th>
-                <th className="numeric">Produced</th>
-                <th className="numeric">Gross Unpaid</th>
-                <th className="numeric">Outstanding Advances</th>
+                <th className="numeric">{ledgerMode === 'date_filtered' ? `Produced (${prodRange === 'Today' ? 'Today' : prodRange === 'Yesterday' ? 'Yesterday' : prodRange === 'Exact' ? prodSpecificDate : 'Filtered'})` : 'Total Produced'}</th>
+                <th className="numeric">{ledgerMode === 'date_filtered' ? 'Earned Pay (Selected)' : 'Gross Unpaid'}</th>
+                <th className="numeric">{ledgerMode === 'date_filtered' ? 'Advances (Period)' : 'Outstanding Advances'}</th>
                 <th className="numeric">Net Payable</th>
                 <th className="text-right"/>
               </tr>
             </thead>
             <tbody>
               {paginatedWorkers.length ? paginatedWorkers.map(w=>{
-                const a=d.allocations.filter(a=>a.labour_id===w.id);
-                const earnings=a.reduce((s,a)=>s+a.completed_qty*a.labour_rate-a.paid_earnings,0);
-                const debt=d.borrowings.filter(b=>b.labour_id===w.id).reduce((s,b)=>s+b.amount-b.deducted_amount,0);
+                const workerAllocs = ledgerMode === 'date_filtered'
+                  ? filteredAllocations.filter(a => a.labour_id === w.id)
+                  : d.allocations.filter(a => a.labour_id === w.id);
+
+                const produced = workerAllocs.reduce((s,a)=>s+a.completed_qty,0);
+                const earnings = ledgerMode === 'date_filtered'
+                  ? workerAllocs.reduce((s,a)=>s + (a.completed_qty * (a.labour_rate || 0)),0)
+                  : workerAllocs.reduce((s,a)=>s + (a.completed_qty * (a.labour_rate || 0)) - (a.paid_earnings || 0),0);
+
+                const workerBorrowings = ledgerMode === 'date_filtered'
+                  ? d.borrowings.filter(b => {
+                      if (b.labour_id !== w.id) return false;
+                      const bDate = b.borrow_date ? b.borrow_date.slice(0, 10) : '';
+                      if (prodRange === 'Today') return bDate === todayStr;
+                      if (prodRange === 'Yesterday') return bDate === yesterdayStr;
+                      if (prodRange === 'Exact') return bDate === prodSpecificDate;
+                      return true;
+                    })
+                  : d.borrowings.filter(b => b.labour_id === w.id);
+
+                const debt = workerBorrowings.reduce((s,b)=>s + b.amount - (ledgerMode === 'date_filtered' ? 0 : b.deducted_amount),0);
+                const netPayable = Math.max(0, earnings - debt);
+
                 return (
                   <tr key={w.id}>
-                    <td className="font-medium text-foreground">{w.labour_name}</td>
-                    <td className="numeric">{number(a.reduce((s,a)=>s+a.completed_qty,0))}</td>
-                    <td className="numeric font-medium">{money(earnings)}</td>
+                    <td className="font-medium text-foreground">
+                      <div>
+                        <span>{w.labour_name}</span>
+                        {w.unit_assignment && <span className="text-xs text-muted-foreground block">{w.unit_assignment}</span>}
+                      </div>
+                    </td>
+                    <td className="numeric font-medium">{number(produced)}</td>
+                    <td className="numeric font-medium text-emerald-500">{money(earnings)}</td>
                     <td className="numeric text-muted-foreground">{money(debt)}</td>
-                    <td className="numeric font-semibold text-foreground">{money(Math.max(0,earnings-debt))}</td>
+                    <td className="numeric font-bold text-foreground">{money(netPayable)}</td>
                     <td className="text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <Button size="sm" variant="ghost" onClick={()=>setStatementWorker(w)}>
                           Statement
                         </Button>
                         <Button size="sm" variant="outline" disabled={!earnings} onClick={()=>{
-                          if(window.confirm('Pay outstanding earnings after deducting advances?')) action('payroll',{labour_id:w.id});
+                          if(window.confirm(`Pay ${money(netPayable)} to ${w.labour_name}?`)) action('payroll',{labour_id:w.id});
                         }}>
                           Pay Payroll
                         </Button>
@@ -686,7 +831,7 @@ export function Labour(){
                   </tr>
                 );
               }) : (
-                <Empty columns={6}/>
+                <Empty columns={6} label="No workers match the selected search or criteria"/>
               )}
             </tbody>
           </table>
@@ -695,9 +840,27 @@ export function Labour(){
         {/* Mobile Card View */}
         <div className="mobile-card-view">
           {paginatedWorkers.length ? paginatedWorkers.map(w => {
-            const a=d.allocations.filter(a=>a.labour_id===w.id);
-            const earnings=a.reduce((s,a)=>s+a.completed_qty*a.labour_rate-a.paid_earnings,0);
-            const debt=d.borrowings.filter(b=>b.labour_id===w.id).reduce((s,b)=>s+b.amount-b.deducted_amount,0);
+            const workerAllocs = ledgerMode === 'date_filtered'
+              ? filteredAllocations.filter(a => a.labour_id === w.id)
+              : d.allocations.filter(a => a.labour_id === w.id);
+
+            const produced = workerAllocs.reduce((s,a)=>s+a.completed_qty,0);
+            const earnings = ledgerMode === 'date_filtered'
+              ? workerAllocs.reduce((s,a)=>s + (a.completed_qty * (a.labour_rate || 0)),0)
+              : workerAllocs.reduce((s,a)=>s + (a.completed_qty * (a.labour_rate || 0)) - (a.paid_earnings || 0),0);
+
+            const workerBorrowings = ledgerMode === 'date_filtered'
+              ? d.borrowings.filter(b => {
+                  if (b.labour_id !== w.id) return false;
+                  const bDate = b.borrow_date ? b.borrow_date.slice(0, 10) : '';
+                  if (prodRange === 'Today') return bDate === todayStr;
+                  if (prodRange === 'Yesterday') return bDate === yesterdayStr;
+                  if (prodRange === 'Exact') return bDate === prodSpecificDate;
+                  return true;
+                })
+              : d.borrowings.filter(b => b.labour_id === w.id);
+
+            const debt = workerBorrowings.reduce((s,b)=>s + b.amount - (ledgerMode === 'date_filtered' ? 0 : b.deducted_amount),0);
             const netPayable = Math.max(0, earnings - debt);
             return (
               <div key={w.id} className="mobile-record-card">
@@ -708,12 +871,12 @@ export function Labour(){
 
                 <div className="mobile-card-grid">
                   <div className="mobile-card-field">
-                    <span className="mobile-card-label">Total Produced</span>
-                    <span className="mobile-card-value">{number(a.reduce((s,a)=>s+a.completed_qty,0))} boxes</span>
+                    <span className="mobile-card-label">Produced Boxes</span>
+                    <span className="mobile-card-value">{number(produced)} boxes</span>
                   </div>
                   <div className="mobile-card-field">
-                    <span className="mobile-card-label">Gross Unpaid</span>
-                    <span className="mobile-card-value">{money(earnings)}</span>
+                    <span className="mobile-card-label">{ledgerMode === 'date_filtered' ? 'Earned Pay' : 'Gross Unpaid'}</span>
+                    <span className="mobile-card-value font-medium text-emerald-500">{money(earnings)}</span>
                   </div>
                   <div className="mobile-card-field">
                     <span className="mobile-card-label">Advances Debt</span>
@@ -732,7 +895,7 @@ export function Labour(){
                     className="w-full"
                     disabled={!earnings}
                     onClick={()=>{
-                      if(window.confirm('Pay outstanding earnings after deducting advances?')) action('payroll',{labour_id:w.id});
+                      if(window.confirm(`Pay ${money(netPayable)} to ${w.labour_name}?`)) action('payroll',{labour_id:w.id});
                     }}
                   >
                     Pay Payroll ({money(netPayable)})
@@ -1100,33 +1263,66 @@ export function Labour(){
         <DialogContent className="modal-wide max-w-2xl" aria-describedby={undefined}>
           <DialogTitle className="text-xl font-medium">Individual Labour Statement</DialogTitle>
           {statementWorker && (() => {
-            const wAllocs = d.allocations.filter(a => a.labour_id === statementWorker.id);
+            const rawAllocs = d.allocations.filter(a => a.labour_id === statementWorker.id);
+            const wAllocs = rawAllocs.filter(a => {
+              const aDate = a.start_time ? a.start_time.slice(0, 10) : '';
+              if (statementRange === 'All') return true;
+              if (statementRange === 'Today') return aDate === todayStr;
+              if (statementRange === 'Yesterday') return aDate === yesterdayStr;
+              if (statementRange === 'Week') {
+                const dt = new Date(a.start_time);
+                return (now.getTime() - dt.getTime()) <= 7 * 86400000;
+              }
+              if (statementRange === 'Month') {
+                const dt = new Date(a.start_time);
+                return dt.getMonth() === now.getMonth() && dt.getFullYear() === now.getFullYear();
+              }
+              return true;
+            });
+
             const wBorrowings = d.borrowings.filter(b => b.labour_id === statementWorker.id);
             const wPayrolls = d.payroll.filter(p => p.labour_id === statementWorker.id);
-            const totalEarned = wAllocs.reduce((s, a) => s + (a.completed_qty * a.labour_rate), 0);
+            const totalEarned = wAllocs.reduce((s, a) => s + (a.completed_qty * (a.labour_rate || 0)), 0);
             const totalPaid = wAllocs.reduce((s, a) => s + a.paid_earnings, 0);
             const totalBorrowed = wBorrowings.reduce((s, b) => s + b.amount, 0);
             const totalDeducted = wBorrowings.reduce((s, b) => s + b.deducted_amount, 0);
             const outstandingDebt = Math.max(0, totalBorrowed - totalDeducted);
             const unpaidEarnings = Math.max(0, totalEarned - totalPaid);
-            const netPayable = Math.max(0, unpaidEarnings - outstandingDebt);
+            const netPayable = Math.max(0, unpaidEarnings - (statementRange === 'All' ? outstandingDebt : 0));
 
             return (
               <div className="space-y-4">
-                <div className="p-4 bg-secondary/50 rounded-xl border border-border flex items-center justify-between">
+                <div className="p-4 bg-secondary/50 rounded-xl border border-border flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <h3 className="font-semibold text-foreground text-base">{statementWorker.labour_name}</h3>
                     <p className="text-xs text-muted-foreground">{statementWorker.phone || 'No phone'} · {statementWorker.unit_assignment || 'General Line'}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs text-muted-foreground block">Net Due</span>
+                    <span className="text-xs text-muted-foreground block">{statementRange === 'All' ? 'Net Due (All Time)' : `Pay Due (${statementRange})`}</span>
                     <strong className="text-base font-semibold text-foreground">{money(netPayable)}</strong>
+                  </div>
+                </div>
+
+                {/* Statement Date Range Filter */}
+                <div className="flex items-center justify-between gap-2 flex-wrap pb-1">
+                  <span className="text-xs font-semibold text-foreground">Statement Period:</span>
+                  <div className="flex items-center gap-1 bg-card border border-border p-0.5 rounded-lg text-xs h-7 shadow-xs">
+                    {(['All', 'Today', 'Yesterday', 'Week', 'Month'] as const).map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${statementRange === r ? 'bg-primary text-primary-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                        onClick={() => setStatementRange(r)}
+                      >
+                        {r === 'All' ? 'All Time' : r === 'Week' ? 'This Week' : r === 'Month' ? 'This Month' : r}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   <div className="p-2.5 bg-card border border-border rounded-lg">
-                    <span className="text-muted-foreground block text-[11px]">Gross Earned</span>
+                    <span className="text-muted-foreground block text-[11px]">{statementRange === 'All' ? 'Gross Earned' : `Earned (${statementRange})`}</span>
                     <strong className="text-foreground">{money(totalEarned)}</strong>
                   </div>
                   <div className="p-2.5 bg-card border border-border rounded-lg">

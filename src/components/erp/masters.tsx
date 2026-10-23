@@ -24,7 +24,7 @@ const config: Record<Kind,{title:string;entity:string;add:string;fields:[string,
     title:'Product Types',
     entity:'product specifications',
     add:'Add Product Type',
-    fields:[['box_type','Product Type'],['specification','Timber / Plywood Spec'],['unit_rate','Standard Unit Rate (₹)']]
+    fields:[['box_type','Product Type'],['specification','Timber / Plywood Spec'],['unit_rate','Labour Rate Per Product (₹)']]
   },
   workers:{
     title:'Labour Master',
@@ -137,11 +137,13 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
         setBusy(false);
         return;
       }
+      const labourRate = Math.max(0, Number(values['unit_rate']) || 0);
       const v={
         box_type:boxType,
         size_dimensions:String(values['size_dimensions'] ?? editing?.['size_dimensions'] ?? 'Standard').trim(),
         specification:String(values['specification'] ?? '').trim(),
-        unit_rate:Math.max(0, Number(values['unit_rate']) || 0)
+        unit_rate:labourRate,
+        default_labour_rate:labourRate
       };
       ({error}=editing?await supabase.from('item_master').update(v).eq('id',String(editing['id'])):await supabase.from('item_master').insert(v));
     } else {
@@ -397,8 +399,8 @@ export function MasterPage({kind,title,department}:{kind:Kind;title?:string;depa
 
                 <div className="mobile-card-grid">
                   <div className="mobile-card-field">
-                    <span className="mobile-card-label">Standard Rate</span>
-                    <span className="mobile-card-value">{money(rate)}</span>
+                    <span className="mobile-card-label">Labour Rate</span>
+                    <span className="mobile-card-value">{money(rate)}/box</span>
                   </div>
                   <div className="mobile-card-field">
                     <span className="mobile-card-label">Specification</span>

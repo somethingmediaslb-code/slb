@@ -179,6 +179,7 @@ export type Database = {
           size_dimensions: string
           specification: string | null
           unit_rate: number
+          default_labour_rate?: number | null
         }
         Insert: {
           box_type: string
@@ -187,6 +188,7 @@ export type Database = {
           size_dimensions: string
           specification?: string | null
           unit_rate?: number
+          default_labour_rate?: number | null
         }
         Update: {
           box_type?: string
@@ -195,6 +197,7 @@ export type Database = {
           size_dimensions?: string
           specification?: string | null
           unit_rate?: number
+          default_labour_rate?: number | null
         }
         Relationships: []
       }

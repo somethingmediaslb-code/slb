@@ -21,6 +21,7 @@ export const ALL_PAGE_KEYS = [
   { key: 'dashboard', label: 'Dashboard', path: '/' },
   { key: 'orders', label: 'Order Entry', path: '/orders' },
   { key: 'production', label: 'Pending Production', path: '/production' },
+  { key: 'under_production', label: 'Under Production', path: '/under-production' },
   { key: 'dispatch', label: 'Dispatch & Delivery Challan', path: '/dispatch' },
   { key: 'parties', label: 'Party Master', path: '/parties' },
   { key: 'catalog', label: 'Item Master', path: '/items' },
@@ -32,13 +33,13 @@ export const ALL_PAGE_KEYS = [
 ] as const;
 
 export const DEFAULT_ROLE_PAGES: Record<AppRole, string[]> = {
-  admin: ['dashboard', 'orders', 'production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile', 'admin'],
-  user: ['dashboard', 'orders', 'production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
-  manager: ['dashboard', 'orders', 'production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
-  supervisor: ['dashboard', 'production', 'workers', 'parties', 'profile'],
+  admin: ['dashboard', 'orders', 'production', 'under_production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile', 'admin'],
+  user: ['dashboard', 'orders', 'production', 'under_production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
+  manager: ['dashboard', 'orders', 'production', 'under_production', 'dispatch', 'parties', 'catalog', 'workers', 'expenses', 'reports', 'settings', 'profile'],
+  supervisor: ['dashboard', 'production', 'under_production', 'workers', 'parties', 'profile'],
   accountant: ['dashboard', 'dispatch', 'expenses', 'reports', 'profile'],
   dispatch_clerk: ['dashboard', 'dispatch', 'orders', 'catalog', 'profile'],
-  viewer: ['dashboard', 'orders', 'production', 'profile'],
+  viewer: ['dashboard', 'orders', 'production', 'under_production', 'profile'],
   pending: [],
 };
 

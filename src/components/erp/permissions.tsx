@@ -21,6 +21,7 @@ import {
   Settings as SettingsIcon,
   ChevronDown,
   Check,
+  Timer,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -76,6 +77,13 @@ const CATEGORIES: PageCategory[] = [
         path: '/production',
         description: 'Work order allocations, worker assignments, and batch tracking',
         icon: Factory,
+      },
+      {
+        key: 'under_production',
+        label: 'Under Production',
+        path: '/under-production',
+        description: 'Real-time running production batches with active countdown clocks and order tracking',
+        icon: Timer,
       },
       {
         key: 'dispatch',
