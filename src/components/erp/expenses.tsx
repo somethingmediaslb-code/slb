@@ -363,7 +363,7 @@ export function Expenses(){
                   <th>Dispatch Date</th>
                   <th className="numeric">Revenue</th>
                   <th className="numeric">Labour Costs</th>
-                  <th className="numeric">Freight</th>
+                  <th className="numeric">Transport Charge</th>
                   <th className="numeric">Allocated Expenses</th>
                   <th className="numeric">Realised Profit</th>
                   <th className="numeric">Margin</th>
@@ -409,7 +409,7 @@ export function Expenses(){
                     <span className="mobile-card-value text-muted-foreground">{money(r.labour)}</span>
                   </div>
                   <div className="mobile-card-field">
-                    <span className="mobile-card-label">Freight</span>
+                    <span className="mobile-card-label">Transport Charge</span>
                     <span className="mobile-card-value text-muted-foreground">{money(r.freight_charges)}</span>
                   </div>
                   <div className="mobile-card-field">
@@ -468,7 +468,7 @@ export function Expenses(){
                         {value:'', label:'Shared / General Overhead'},
                         ...d.challans.filter(c => c.status !== 'Cancelled').map(c=>({
                           value: c.id,
-                          label: `${c.challan_number} · Freight: ₹${c.freight_charges || 0}`
+                          label: `${c.challan_number} · Transport: ₹${c.freight_charges || 0}`
                         }))
                       ]}
                     />

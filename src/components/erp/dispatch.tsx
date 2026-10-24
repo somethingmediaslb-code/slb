@@ -5,6 +5,7 @@ import {Button} from '@/components/ui/button';
 import {Checkbox} from '@/components/ui/checkbox';
 import {Dialog,DialogContent,DialogTitle} from '@/components/ui/dialog';
 import {useFactory} from './provider';
+import {toast} from 'sonner';
 import {Heading,Empty,AccessNotice,SearchFilter,ExportButton,Pill,ViewTabs,FilterToken,TableCalcBar,SegmentedMeter,Pagination,DateFilterPill,ThemedDatePicker,ThemedSelect,WhatsAppIcon,clearModalSearchParams} from './common';
 import {downloadCsv,dateLabel,money,today,number,type Row} from '@/lib/erp-data';
 
@@ -32,6 +33,7 @@ export function Dispatch(){
 
   // Filter Transport Labour from Labour Management
   const transportWorkers = d.workers.filter(w => 
+    w.labour_category === 'transport' ||
     (w as any).department === 'Transport' || 
     Boolean((w as any).vehicle_number) ||
     (w.unit_assignment && w.unit_assignment.toLowerCase().includes('transport'))
@@ -110,7 +112,20 @@ export function Dispatch(){
     const f=new FormData(e.currentTarget);
     const finalCarrier = carrierName.trim() || String(f.get('transport_carrier') || '').trim();
     const finalVehicle = vehicleNumber.trim() || String(f.get('vehicle_number') || '').trim();
-    const finalFreight = Number(freightCharges || f.get('freight_charges')) || 0;
+    const freightValStr = (freightCharges !== '' ? freightCharges : String(f.get('freight_charges') ?? '')).trim();
+
+    if (!freightValStr || isNaN(Number(freightValStr))) {
+      toast.error('Transport charge is required.');
+      setBusy(false);
+      return;
+    }
+
+    const finalFreight = Number(freightValStr);
+    if (finalFreight < 0) {
+      toast.error('Transport charge cannot be negative.');
+      setBusy(false);
+      return;
+    }
 
     const ok=await action('challan',{
       order_item_id:selected.id,
@@ -119,7 +134,8 @@ export function Dispatch(){
       vehicle_number:finalVehicle,
       lr_number:String(f.get('lr_number') || ''),
       freight_charges:finalFreight,
-      dispatch_date:new Date(String(f.get('dispatch_date'))).toISOString()
+      dispatch_date:new Date(String(f.get('dispatch_date'))).toISOString(),
+      transporter_id:selectedLabourId || null
     });
     setBusy(false);
     if(ok){
@@ -376,7 +392,7 @@ export function Dispatch(){
                   <th>Transporter Carrier</th>
                   <th>Vehicle #</th>
                   <th>LR #</th>
-                  <th className="numeric">Freight (₹)</th>
+                  <th className="numeric">Transport Charge (₹)</th>
                   <th className="numeric">Total Shipped</th>
                   <th>Delivery Status</th>
                   <th className="text-right">Actions</th>
@@ -516,7 +532,7 @@ export function Dispatch(){
                       <span className="mobile-card-value">{c.lr_number || '—'}</span>
                     </div>
                     <div className="mobile-card-field">
-                      <span className="mobile-card-label">Freight Charges</span>
+                      <span className="mobile-card-label">Transport Charge</span>
                       <span className="mobile-card-value text-muted-foreground">{money(c.freight_charges || 0)}</span>
                     </div>
                   </div>
@@ -611,7 +627,7 @@ export function Dispatch(){
                   </span>
                 ) : (
                   <span className="text-[11px] text-muted-foreground">
-                    Auto-populates vehicle, freight & carrier
+                    Auto-populates vehicle, transport charge & carrier
                   </span>
                 )}
               </div>
@@ -673,7 +689,7 @@ export function Dispatch(){
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Fixed Freight</span>
+                      <span className="text-[10px] text-muted-foreground block uppercase tracking-wider">Transport Charge</span>
                       <strong className="text-emerald-500 font-semibold text-sm">
                         {money(freight)}
                       </strong>
@@ -728,7 +744,7 @@ export function Dispatch(){
               </label>
 
               <label>
-                Freight Charges (₹)
+                Transport Charge (₹)
                 <input
                   name="freight_charges"
                   type="number"
@@ -737,6 +753,7 @@ export function Dispatch(){
                   value={freightCharges}
                   onChange={e => setFreightCharges(e.target.value)}
                   placeholder="e.g. 500"
+                  required
                 />
               </label>
             </div>
@@ -868,7 +885,7 @@ export function Dispatch(){
                   <span className="text-sm font-medium text-foreground">{confirmDispatchChallan.lr_number||'—'}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground block">Freight Charges</span>
+                  <span className="text-muted-foreground block">Transport Charge</span>
                   <span className="text-sm font-medium text-foreground">{money(confirmDispatchChallan.freight_charges||0)}</span>
                 </div>
                 <div>

@@ -128,6 +128,7 @@ const tables = {
   expenses: 'expenses',
   borrowings: 'labour_borrowings',
   payroll: 'labour_payroll',
+  attendance: 'helper_attendance',
   notifications: 'factory_notifications',
   profiles: 'profiles'
 } as const;

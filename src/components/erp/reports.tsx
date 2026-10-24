@@ -466,7 +466,7 @@ export function Reports() {
             </div>
 
             <div className="p-3.5 bg-card border border-border rounded-xl">
-              <span className="text-[11px] text-muted-foreground block font-medium">Direct DC Freight</span>
+              <span className="text-[11px] text-muted-foreground block font-medium">Direct DC Transport Charge</span>
               <strong className="text-lg font-normal text-foreground tabular-nums tracking-tight">
                 {money(totalFreight)}
               </strong>
@@ -533,7 +533,7 @@ export function Reports() {
                   <th className="numeric">Shipped Qty</th>
                   <th className="numeric">Realised Revenue</th>
                   <th className="numeric">Direct Labour</th>
-                  <th className="numeric">DC Freight</th>
+                  <th className="numeric">DC Transport Charge</th>
                   <th className="numeric">Overheads</th>
                   <th className="numeric">Realised Profit</th>
                   <th className="numeric">Margin</th>
@@ -741,7 +741,7 @@ export function Reports() {
                 <th>Vehicle #</th>
                 <th>LR #</th>
                 <th className="numeric">Shipped Units</th>
-                <th className="numeric">Freight Charges</th>
+                <th className="numeric">Transport Charge</th>
                 <th>Status</th>
               </tr>
             </thead>

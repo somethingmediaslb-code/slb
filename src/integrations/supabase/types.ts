@@ -67,6 +67,7 @@ export type Database = {
           transport_carrier: string | null
           vehicle_number: string | null
           transporter_id: string | null
+          paid_freight: number
         }
         Insert: {
           challan_number?: string
@@ -81,6 +82,7 @@ export type Database = {
           transport_carrier?: string | null
           vehicle_number?: string | null
           transporter_id?: string | null
+          paid_freight?: number
         }
         Update: {
           challan_number?: string
@@ -95,6 +97,7 @@ export type Database = {
           transport_carrier?: string | null
           vehicle_number?: string | null
           transporter_id?: string | null
+          paid_freight?: number
         }
         Relationships: [
           {
@@ -239,6 +242,50 @@ export type Database = {
           },
         ]
       }
+      helper_attendance: {
+        Row: {
+          id: string
+          helper_id: string
+          attendance_date: string
+          status: 'Present' | 'Half Day' | 'Absent'
+          wage_rate: number
+          calculated_wage: number
+          paid_wage: number
+          remarks: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          helper_id: string
+          attendance_date?: string
+          status: 'Present' | 'Half Day' | 'Absent'
+          wage_rate?: number
+          calculated_wage?: number
+          paid_wage?: number
+          remarks?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          helper_id?: string
+          attendance_date?: string
+          status?: 'Present' | 'Half Day' | 'Absent'
+          wage_rate?: number
+          calculated_wage?: number
+          paid_wage?: number
+          remarks?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "helper_attendance_helper_id_fkey"
+            columns: ["helper_id"]
+            isOneToOne: false
+            referencedRelation: "labour_master"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       labour_master: {
         Row: {
           created_at: string | null
@@ -248,6 +295,9 @@ export type Database = {
           phone: string | null
           unit_assignment: string | null
           department: string | null
+          labour_category: 'contract' | 'transport' | 'helper' | 'loader'
+          working_type: string | null
+          vehicle_name: string | null
           vehicle_number: string | null
           fixed_freight_charges: number | null
         }
@@ -259,6 +309,9 @@ export type Database = {
           phone?: string | null
           unit_assignment?: string | null
           department?: string | null
+          labour_category?: 'contract' | 'transport' | 'helper' | 'loader'
+          working_type?: string | null
+          vehicle_name?: string | null
           vehicle_number?: string | null
           fixed_freight_charges?: number | null
         }
@@ -270,6 +323,9 @@ export type Database = {
           phone?: string | null
           unit_assignment?: string | null
           department?: string | null
+          labour_category?: 'contract' | 'transport' | 'helper' | 'loader'
+          working_type?: string | null
+          vehicle_name?: string | null
           vehicle_number?: string | null
           fixed_freight_charges?: number | null
         }

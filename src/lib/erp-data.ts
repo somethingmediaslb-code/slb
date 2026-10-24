@@ -1,7 +1,7 @@
 import type { Database } from '@/integrations/supabase/types';
 export type Row<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row'];
-export interface FactoryData { parties:Row<'party_master'>[]; catalog:Row<'item_master'>[]; orders:Row<'orders'>[]; items:Row<'order_items'>[]; workers:Row<'labour_master'>[]; allocations:Row<'production_allocations'>[]; challans:Row<'delivery_challans'>[]; challanItems:Row<'challan_items'>[]; expenses:Row<'expenses'>[]; borrowings:Row<'labour_borrowings'>[]; payroll:Row<'labour_payroll'>[]; notifications:Row<'factory_notifications'>[]; roles:Row<'user_roles'>[]; profiles:Row<'profiles'>[]; }
-export const emptyData:FactoryData={parties:[],catalog:[],orders:[],items:[],workers:[],allocations:[],challans:[],challanItems:[],expenses:[],borrowings:[],payroll:[],notifications:[],roles:[],profiles:[]};
+export interface FactoryData { parties:Row<'party_master'>[]; catalog:Row<'item_master'>[]; orders:Row<'orders'>[]; items:Row<'order_items'>[]; workers:Row<'labour_master'>[]; allocations:Row<'production_allocations'>[]; challans:Row<'delivery_challans'>[]; challanItems:Row<'challan_items'>[]; expenses:Row<'expenses'>[]; borrowings:Row<'labour_borrowings'>[]; payroll:Row<'labour_payroll'>[]; attendance:Row<'helper_attendance'>[]; notifications:Row<'factory_notifications'>[]; roles:Row<'user_roles'>[]; profiles:Row<'profiles'>[]; }
+export const emptyData:FactoryData={parties:[],catalog:[],orders:[],items:[],workers:[],allocations:[],challans:[],challanItems:[],expenses:[],borrowings:[],payroll:[],attendance:[],notifications:[],roles:[],profiles:[]};
 export const money = (n?: number | null) =>
   (n === null || n === undefined || isNaN(Number(n)))
     ? '—'
